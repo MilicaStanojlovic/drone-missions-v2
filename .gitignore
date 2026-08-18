@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# builds & coverage
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# env & secrets — never commit real values
+.env
+.env.local
+.env.*.local
+
+# logs & OS noise
+*.log
+.DS_Store
+Thumbs.db
+
+# editor
+.idea/
+.vscode/
+
+# per-phase working plans (checked-off records stay local)
+plans/
