@@ -62,14 +62,23 @@ const role = (name) =>
 
 // agent() resolves to null if the subagent dies on a terminal API error (e.g. 529 Overloaded).
 // Re-attempt transient failures instead of crashing the whole phase run.
+// opts.fallbackModel: if the first two attempts die (e.g. opus 529 Overloaded), the third
+// attempt runs on the fallback model instead so the phase keeps moving.
 async function runAgent(prompt, opts) {
+  const { fallbackModel, ...agentOpts } = opts;
   for (let i = 1; i <= 3; i++) {
-    const result = await agent(
-      prompt,
-      i === 1 ? opts : { ...opts, label: `${opts.label || "agent"}~retry${i - 1}` },
-    );
+    const useFallback = fallbackModel && i === 3;
+    const attemptOpts = {
+      ...agentOpts,
+      ...(useFallback ? { model: fallbackModel } : {}),
+      label:
+        i === 1
+          ? agentOpts.label
+          : `${agentOpts.label || "agent"}~retry${i - 1}${useFallback ? "-" + fallbackModel : ""}`,
+    };
+    const result = await agent(prompt, attemptOpts);
     if (result !== null && result !== undefined) return result;
-    log(`Agent ${opts.label || ""} returned null (attempt ${i}/3)${i < 3 ? " — retrying" : ""}.`);
+    log(`Agent ${agentOpts.label || ""} returned null (attempt ${i}/3)${i < 3 ? " — retrying" : ""}.`);
   }
   throw new Error(`Agent ${opts.label || ""} failed after 3 attempts`);
 }
@@ -118,7 +127,7 @@ for (const task of plan.tasks) {
     `${role("implementer")}
 
 Implement the next unchecked task in ${planFile} (expected to be: "${task.title}"). Check it off in that file when done.`,
-    { model: "sonnet", phase: "Implement", label: task.title }, // TEMP: sonnet while opus is overloaded (529s) — revert to opus when it recovers
+    { model: "opus", fallbackModel: "sonnet", phase: "Implement", label: task.title },
   );
 }
 
@@ -135,6 +144,7 @@ while (true) {
 Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${TARGET} (git diff develop...HEAD, plus untracked files; if develop does not exist yet, review the whole tree). The phase's plan/checklist is ${planFile}; its spec is in MIGRATION_PLAN.md. Compare ported behavior against the ORIGINAL source in ${BACKEND} and ${FRONTEND}. Return structured output: green=true only if your verdict is merge-ready, and put your full findings report (or "merge-ready" summary) in report.`,
     {
       model: "opus",
+      fallbackModel: "sonnet",
       phase: attempt === 0 ? "Review" : "Fix",
       label: `review#${attempt + 1}`,
       schema: VERDICT_SCHEMA,
@@ -191,6 +201,6 @@ ${review.report}
 
 TESTER REPORT:
 ${test.report}`,
-    { model: "sonnet", phase: "Fix", label: `fix#${attempt}` }, // TEMP: sonnet while opus is overloaded — revert to opus when it recovers
+    { model: "opus", fallbackModel: "sonnet", phase: "Fix", label: `fix#${attempt}` },
   );
 }
