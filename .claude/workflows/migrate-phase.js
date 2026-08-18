@@ -114,7 +114,7 @@ for (const task of plan.tasks) {
     `${role('implementer')}
 
 Implement the next unchecked task in ${planFile} (expected to be: "${task.title}"). Check it off in that file when done.`,
-    { model: 'opus', phase: 'Implement', label: task.title }
+    { model: 'sonnet', phase: 'Implement', label: task.title } // TEMP: sonnet while opus is overloaded (529s) — revert to opus when it recovers
   )
 }
 
@@ -161,6 +161,6 @@ ${review.report}
 
 TESTER REPORT:
 ${test.report}`,
-    { model: 'opus', phase: 'Fix', label: `fix#${attempt}` }
+    { model: 'sonnet', phase: 'Fix', label: `fix#${attempt}` } // TEMP: sonnet while opus is overloaded — revert to opus when it recovers
   )
 }
