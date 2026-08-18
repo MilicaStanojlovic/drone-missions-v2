@@ -1,0 +1,79 @@
+name: CI
+
+# Replaces the Spring/Maven build's Checkstyle + `mvn verify` gate: lint,
+# typecheck, unit/integration tests, and a production build must all pass
+# before a change can merge. `pnpm db:check` (real schema drift against a
+# live DB — see scripts/check-schema-drift.mjs) only runs once a real
+# `DATABASE_URL` secret is configured for this repo — until then it is
+# reported as skipped rather than failing the pipeline, mirroring how the
+# app itself runs DB-less during this phase.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    # `secrets` is not a valid context in a step-level `if:` (only github,
+    # needs, strategy, matrix, job, runner, env, vars, steps, inputs are) —
+    # hoisting the check into a job-level env var lets later steps branch on
+    # a plain `env.HAS_DB` boolean instead.
+    env:
+      HAS_DB: ${{ secrets.DATABASE_URL != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm/action-setup@v4 has no built-in default version; it reads the
+      # "packageManager" field from package.json (pinned there to match
+      # pnpm-lock.yaml's lockfileVersion) when no `version:` input is given.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit / integration tests
+        run: pnpm test
+
+      # `next build` evaluates every route module during "Collecting page
+      # data" (see src/app/api/health/route.ts), which imports the fail-fast
+      # Zod env loader in src/lib/env.ts — JWT_SECRET has no default (see
+      # that file's doc comment on why), so the build needs *some* 32-byte+
+      # value present just to get past module evaluation. Same fixture
+      # pattern as the Dockerfile's build stage and playwright.config.ts's
+      # webServer env; never used to sign a real token.
+      - name: Build
+        run: pnpm build
+        env:
+          JWT_SECRET: ci-build-fixture-jwt-secret-not-a-real-secret-32bytes
+
+      - name: Schema drift check
+        if: env.HAS_DB == 'true'
+        run: pnpm db:check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Schema drift check (skipped)
+        if: env.HAS_DB == 'false'
+        run: echo "pnpm db:check skipped — no DB configured"
