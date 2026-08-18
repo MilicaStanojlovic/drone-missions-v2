@@ -54,6 +54,11 @@ const repoContext = [
 ].join('\n')
 
 
+
+// Custom agentTypes from .claude/agents/ are not in this session's registry (created after
+// session start), so each subagent instead reads its role file and adopts it.
+const role = (name) => `First, Read ${TARGET}/.claude/agents/${name}.md and adopt the entire body as your role instructions for this task (ignore the frontmatter's tools/model fields — they are for a different invocation path). Follow that role exactly, including its read-only rules on the source repos.`
+
 // agent() resolves to null if the subagent dies on a terminal API error (e.g. 529 Overloaded).
 // Re-attempt transient failures instead of crashing the whole phase run.
 async function runAgent(prompt, opts) {
@@ -106,8 +111,10 @@ log(`Planned ${plan.tasks.length} task(s).`)
 phase('Implement')
 for (const task of plan.tasks) {
   await runAgent(
-    `Implement the next unchecked task in ${planFile} (expected to be: "${task.title}"). Check it off in that file when done.`,
-    { agentType: 'implementer', phase: 'Implement', label: task.title }
+    `${role('implementer')}
+
+Implement the next unchecked task in ${planFile} (expected to be: "${task.title}"). Check it off in that file when done.`,
+    { model: 'opus', phase: 'Implement', label: task.title }
   )
 }
 
@@ -119,13 +126,17 @@ let attempt = 0
 
 while (true) {
   review = await runAgent(
-    `Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${TARGET} (git diff develop...HEAD, plus untracked files; if develop does not exist yet, review the whole tree). The phase's plan/checklist is ${planFile}; its spec is in MIGRATION_PLAN.md. Compare ported behavior against the ORIGINAL source in ${BACKEND} and ${FRONTEND}. Return structured output: green=true only if your verdict is merge-ready, and put your full findings report (or "merge-ready" summary) in report.`,
-    { agentType: 'reviewer', phase: attempt === 0 ? 'Review' : 'Fix', label: `review#${attempt + 1}`, schema: VERDICT_SCHEMA }
+    `${role('reviewer')}
+
+Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${TARGET} (git diff develop...HEAD, plus untracked files; if develop does not exist yet, review the whole tree). The phase's plan/checklist is ${planFile}; its spec is in MIGRATION_PLAN.md. Compare ported behavior against the ORIGINAL source in ${BACKEND} and ${FRONTEND}. Return structured output: green=true only if your verdict is merge-ready, and put your full findings report (or "merge-ready" summary) in report.`,
+    { model: 'opus', phase: attempt === 0 ? 'Review' : 'Fix', label: `review#${attempt + 1}`, schema: VERDICT_SCHEMA }
   )
 
   test = await runAgent(
-    `Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "Done when" criteria: ${doneWhen || 'see the phase section in MIGRATION_PLAN.md'}. Its checklist is ${planFile}. Return structured output: green=true only if your verdict is all-green (environment-caused skips allowed but must be listed in report), and put the full per-check report in report.`,
-    { agentType: 'tester', phase: attempt === 0 ? 'Test' : 'Fix', label: `test#${attempt + 1}`, schema: VERDICT_SCHEMA }
+    `${role('tester')}
+
+Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "Done when" criteria: ${doneWhen || 'see the phase section in MIGRATION_PLAN.md'}. Its checklist is ${planFile}. Return structured output: green=true only if your verdict is all-green (environment-caused skips allowed but must be listed in report), and put the full per-check report in report.`,
+    { model: 'sonnet', phase: attempt === 0 ? 'Test' : 'Fix', label: `test#${attempt + 1}`, schema: VERDICT_SCHEMA }
   )
 
   if (review.green && test.green) {
@@ -141,13 +152,15 @@ while (true) {
   phase('Fix')
   log(`Review green: ${review.green}, test green: ${test.green} — fix pass ${attempt}/${MAX_RETRIES}.`)
   await runAgent(
-    `Fix pass ${attempt} for migration phase "${phaseTitle || phaseSlug}". Do NOT pick a task from the plan file this time — instead, address every blocking and needs-changes finding below, in ${TARGET} only. Read the actual findings carefully and fix root causes, keeping all repo conventions (MIGRATION_PLAN.md) intact.
+    `${role('implementer')}
+
+Fix pass ${attempt} for migration phase "${phaseTitle || phaseSlug}". Do NOT pick a task from the plan file this time — instead, address every blocking and needs-changes finding below, in ${TARGET} only. Read the actual findings carefully and fix root causes, keeping all repo conventions (MIGRATION_PLAN.md) intact.
 
 REVIEWER FINDINGS:
 ${review.report}
 
 TESTER REPORT:
 ${test.report}`,
-    { agentType: 'implementer', phase: 'Fix', label: `fix#${attempt}` }
+    { model: 'opus', phase: 'Fix', label: `fix#${attempt}` }
   )
 }
