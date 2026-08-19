@@ -15,9 +15,22 @@ import type { OpenMissionQuery } from "./mission.queries";
  * duplicate list-cache entries: `lowercasesAndTrimsLocationAndKeyword`,
  * `blankFiltersBecomeNull`, `nullFiltersStayNull`,
  * `searchesDifferingOnlyByCaseProduceAnEqualCacheKey`,
- * `statusesAreAlwaysPublishedAndBidding`. Its sixth case,
- * `adminSearchBuildsALowercasePatternAndBlankMeansEverything`, is skipped —
- * `searchAll` has no port yet, it's Phase 7.
+ * `statusesAreAlwaysPublishedAndBidding` — plus its sixth case,
+ * `adminSearchBuildsALowercasePatternAndBlankMeansEverything`, mirrored in
+ * Phase 7 along with `searchAll` itself.
+ *
+ * Phase 7 also mirrors the four moderation cases of
+ * `MissionServiceModerationTest` — `hideMovesVisibleToHiddenAndRecordsTheAdmin`,
+ * `hideRejectsAlreadyHidden`, `removeDeletesTheMissionAndRecordsTheAdmin`,
+ * `removingAMissingMissionIsANotFound`. That suite's other five cases are
+ * already covered above and are not duplicated: its three suspension cases
+ * (`createRejectsSuspendedDesigner`, `startRejectsSuspendedPilot`,
+ * `completeRejectsSuspendedPilot`) landed with `create` in Phase 2 and with
+ * `start`/`complete` in Phase 5, and its two owner-delete cases
+ * (`ownerDeleteRemovesAndRecordsTheDesigner`, `ownerDeleteByAnyoneElseIsDenied`)
+ * with `deleteMission` in Phase 2. `unhide` has no Java case at all — the
+ * mirror-image transition is pinned here anyway, since it is the other half of
+ * the one state machine `hide` shares.
  *
  * The Java suite stops at `findOpen`, because that is the method issue #12
  * was about; the create/visibility/ownership rules it leaves to
@@ -51,6 +64,7 @@ const daoMock = {
   findOpen: vi.fn(),
   findByUserId: vi.fn(),
   findByAwardedPilotId: vi.fn(),
+  searchAll: vi.fn(),
   invalidateLists: vi.fn(),
   invalidate: vi.fn(),
   save: vi.fn(),
@@ -126,10 +140,14 @@ import {
   findById,
   findOpen,
   findOwnedBy,
+  hide,
   MissionAccessDeniedError,
   MissionConflictError,
   MissionNotFoundError,
+  remove,
+  searchAll,
   start,
+  unhide,
   update,
   type MissionDraft,
 } from "./mission.service";
@@ -900,6 +918,187 @@ describe("mission.service.ts", () => {
 
       await expect(cancel(4, 7)).rejects.toBeInstanceOf(MissionNotFoundError);
       expect(transactionMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("searchAll", () => {
+    const request = { page: 0, size: 20 };
+
+    beforeEach(() => {
+      daoMock.searchAll.mockResolvedValue({ content: [], request, totalElements: 0 });
+    });
+
+    /** Mirrors `adminSearchBuildsALowercasePatternAndBlankMeansEverything`. */
+    it("adminSearchBuildsALowercasePatternAndBlankMeansEverything", async () => {
+      await searchAll("   ", request);
+      expect(daoMock.searchAll).toHaveBeenLastCalledWith(null, request);
+
+      await searchAll(" Orchard ", request);
+      expect(daoMock.searchAll).toHaveBeenLastCalledWith("%orchard%", request);
+    });
+
+    it("treats an absent q as 'everything' too", async () => {
+      // The route hands `undefined` when `?q` is not present at all, where the
+      // Java controller's `@RequestParam(required = false)` hands null.
+      await searchAll(undefined, request);
+
+      expect(daoMock.searchAll).toHaveBeenLastCalledWith(null, request);
+    });
+
+    it("hands back exactly the page the DAO returned", async () => {
+      const page = { content: [fakeMission()], request, totalElements: 1 };
+      daoMock.searchAll.mockResolvedValue(page);
+
+      await expect(searchAll(null, request)).resolves.toBe(page);
+    });
+
+    it("applies no visibility or moderation filter of its own", async () => {
+      // The admin listing is the one view that must show drafts and hidden
+      // missions: the service adds nothing but the pattern, so whatever the
+      // query returns is what the admin sees.
+      const hidden = fakeMission({ status: "DRAFT", moderation: "HIDDEN" });
+      daoMock.searchAll.mockResolvedValue({ content: [hidden], request, totalElements: 1 });
+
+      await expect(searchAll(null, request)).resolves.toMatchObject({ content: [hidden] });
+    });
+  });
+
+  describe("hide / unhide", () => {
+    it("hideMovesVisibleToHiddenAndRecordsTheAdmin", async () => {
+      const mission = fakeMission({ id: 1, status: "PUBLISHED", moderation: "VISIBLE" });
+      daoMock.findFresh.mockResolvedValue(mission);
+      daoMock.save.mockImplementation(async (m: Mission) => m);
+
+      await expect(hide(1, 9)).resolves.toMatchObject({ moderation: "HIDDEN" });
+
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 9,
+        // ADMIN, not the mission's designer — moderation is an admin act.
+        actorRole: "ADMIN",
+        action: "MISSION_HIDDEN",
+        targetType: "MISSION",
+        targetId: 1,
+      });
+    });
+
+    it("hideRejectsAlreadyHidden", async () => {
+      daoMock.findFresh.mockResolvedValue(
+        fakeMission({ id: 1, status: "PUBLISHED", moderation: "HIDDEN" }),
+      );
+
+      await expect(hide(1, 9)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("names the current moderation and the target, as the source's message does", async () => {
+      daoMock.findFresh.mockResolvedValue(fakeMission({ id: 1, moderation: "HIDDEN" }));
+
+      // Verbatim from `"Mission %d cannot go from %s to %s"` — the second `%s`
+      // is the *target* state, so refusing to hide an already hidden mission
+      // reads "from HIDDEN to HIDDEN". Odd-looking and deliberately kept: the
+      // Angular client surfaces this text verbatim in its error toast.
+      await expect(hide(1, 9)).rejects.toThrow("Mission 1 cannot go from HIDDEN to HIDDEN");
+    });
+
+    it("unhide moves HIDDEN back to VISIBLE and records the admin", async () => {
+      const mission = fakeMission({ id: 1, moderation: "HIDDEN" });
+      daoMock.findFresh.mockResolvedValue(mission);
+      daoMock.save.mockImplementation(async (m: Mission) => m);
+
+      await expect(unhide(1, 9)).resolves.toMatchObject({ moderation: "VISIBLE" });
+
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 9,
+        actorRole: "ADMIN",
+        action: "MISSION_UNHIDDEN",
+        targetId: 1,
+      });
+    });
+
+    it("unhide rejects a mission that is already VISIBLE", async () => {
+      daoMock.findFresh.mockResolvedValue(fakeMission({ id: 1, moderation: "VISIBLE" }));
+
+      await expect(unhide(1, 9)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("changes nothing but the moderation flag", async () => {
+      // `moderate` loads a live row and saves it back, so the status, owner and
+      // awarded pilot have to survive untouched — the same rule `update` obeys.
+      const mission = fakeMission({
+        id: 1,
+        status: "IN_PROGRESS",
+        userId: 7,
+        awardedPilotId: 5,
+        moderation: "VISIBLE",
+      });
+      daoMock.findFresh.mockResolvedValue(mission);
+      daoMock.save.mockImplementation(async (m: Mission) => m);
+
+      await hide(1, 9);
+
+      expect(daoMock.save.mock.calls[0][0]).toMatchObject({
+        status: "IN_PROGRESS",
+        userId: 7,
+        awardedPilotId: 5,
+        moderation: "HIDDEN",
+      });
+    });
+
+    it("throws MissionNotFoundError for a missing mission", async () => {
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(hide(1, 9)).rejects.toBeInstanceOf(MissionNotFoundError);
+      await expect(unhide(1, 9)).rejects.toBeInstanceOf(MissionNotFoundError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("remove", () => {
+    it("removeDeletesTheMissionAndRecordsTheAdmin", async () => {
+      const mission = fakeMission({
+        id: 1,
+        name: "Orchard survey",
+        status: "PUBLISHED",
+        moderation: "HIDDEN",
+      });
+      daoMock.findFresh.mockResolvedValue(mission);
+
+      await remove(1, 9);
+
+      expect(daoMock.delete).toHaveBeenCalledWith(mission);
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 9,
+        actorRole: "ADMIN",
+        action: "MISSION_REMOVED",
+        targetType: "MISSION",
+        targetId: 1,
+        // The hard delete cascades everything else away, so this row is all
+        // that is left of the mission — hence the snapshotted name.
+        details: '"Orchard survey"',
+      });
+    });
+
+    it("removingAMissingMissionIsANotFound", async () => {
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(remove(1, 9)).rejects.toBeInstanceOf(MissionNotFoundError);
+      expect(daoMock.delete).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("removes a mission in any state, owned by anyone", async () => {
+      // No ownership check and no status guard: unlike `deleteMission`, an
+      // admin may remove any mission there is.
+      const mission = fakeMission({ id: 1, status: "COMPLETED", userId: 7, awardedPilotId: 5 });
+      daoMock.findFresh.mockResolvedValue(mission);
+
+      await remove(1, 9);
+
+      expect(daoMock.delete).toHaveBeenCalledWith(mission);
     });
   });
 });

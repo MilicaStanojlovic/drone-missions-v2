@@ -1,6 +1,7 @@
 import "server-only";
 import {
   and,
+  count,
   desc,
   eq,
   gte,
@@ -15,6 +16,7 @@ import {
 } from "drizzle-orm";
 import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { mission, users, type MissionStatus } from "@/db/schema";
+import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
 import type { User } from "@/features/users/user.types";
 import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mission.types";
 
@@ -32,15 +34,14 @@ import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mi
  * snapshot back over columns (`status`, `awardedPilotId`) an edit deliberately
  * never touches.
  *
- * `searchAll` and `countByStatus` (Phases 7/9) and the decorator's
- * `invalidateLists` (Phase 3's cache task) are not ported here.
+ * `countByStatus` (Phase 9) is not ported here.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/access/JpaMissionDao.java
  * - drone-missions-backend/.../data/access/MissionDao.java (contract + findById/findFresh rule)
  * - drone-missions-backend/.../data/access/OpenMissionQuery.java
  * - drone-missions-backend/.../data/repository/MissionRepository.java
- *   (`findByDesigner_Id`, `findByAwardedPilot_Id`,
+ *   (`findByDesigner_Id`, `findByAwardedPilot_Id`, `searchAll`,
  *   `findByAwardedPilot_IdIsNotNullAndStatusInAndEndTimeBefore`)
  * - drone-missions-backend/.../data/model/Mission.java
  */
@@ -251,6 +252,69 @@ export async function findOverdue(
     ),
   );
   return rows.map(toMission);
+}
+
+/**
+ * The admin listing: every mission regardless of status or moderation, paged,
+ * newest-created first, optionally narrowed by a name/designer pattern.
+ * Mirrors `MissionRepository.searchAll`.
+ *
+ * The `pattern` arrives as a ready lowercase `%…%` LIKE pattern or null — the
+ * service builds it (see `MissionService.searchAll`), exactly as the source
+ * does, so no SQL function wraps the bind parameter. A null pattern means
+ * "everything": the source expresses that as `:pattern is null or …` inside
+ * the JPQL, and here it is simply a predicate that is never added, which
+ * reaches the database as the same query without the disjunction.
+ *
+ * The designer join stays the LEFT one `selectMissions` builds, and the
+ * repository's own comment says why that is load-bearing rather than
+ * incidental: navigating `m.designer.username` would inner-join and silently
+ * drop legacy ownerless missions from the admin list — the one list that must
+ * show every mission there is.
+ *
+ * The `createdAt` DESC order is the `@PageableDefault(sort = "createdAt",
+ * direction = DESC)` on `MissionController.adminList`; it lives here rather
+ * than travelling in `PageRequest` for the reason `src/lib/api/paging.ts`
+ * documents. `id DESC` is added as a tiebreaker, the same deviation
+ * `user.queries.ts`'s `search` documents — rows sharing a `created_at` would
+ * otherwise be in an unspecified order, which under paging can put one row on
+ * two pages or on none.
+ *
+ * The count is a second query against the same filter (and the same join, so a
+ * designer-name match is counted the same way it is listed), exactly as Spring
+ * Data issues one for a `Page`. Both run concurrently: independent reads, and a
+ * row inserted between them can at worst make `totalElements` disagree with
+ * `content` by one — the same benign race Spring's sequential pair has.
+ */
+export async function searchAll(
+  pattern: string | null,
+  request: PageRequest,
+): Promise<Page<Mission>> {
+  const db = getDb();
+  // `lower(col) LIKE pattern` rather than `ILIKE`, and no escaping of LIKE
+  // metacharacters in the pattern — a literal port of the source's JPQL, where
+  // a `%` typed into the admin search widens the match too.
+  const where =
+    pattern === null
+      ? undefined
+      : or(
+          like(sql`lower(${mission.name})`, pattern),
+          like(sql`lower(${users.username})`, pattern),
+        );
+
+  const [rows, [total]] = await Promise.all([
+    selectMissions()
+      .where(where)
+      .orderBy(desc(mission.createdAt), desc(mission.id))
+      .limit(request.size)
+      .offset(offsetOf(request)),
+    db
+      .select({ value: count() })
+      .from(mission)
+      .leftJoin(users, eq(mission.userId, users.id))
+      .where(where),
+  ]);
+  return { content: rows.map(toMission), request, totalElements: total?.value ?? 0 };
 }
 
 /**

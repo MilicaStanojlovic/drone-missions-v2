@@ -1,5 +1,6 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
+import type { PagedModel } from "@/lib/api/paging";
 import type { MissionResponse } from "./mission.mapper";
 import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "./mission.types";
 
@@ -25,9 +26,9 @@ import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "./missio
  *
  * Only the endpoints this phase's API exposes are ported. `getMyJobs` and
  * `start`/`complete`/`cancel` joined in Phase 5, with the lifecycle routes
- * that back them; `adminList` and `hide`/`unhide`/`remove` still have no route
- * (Phase 7) and are deliberately absent rather than stubbed against URLs that
- * would 404.
+ * that back them; `adminList` and `hide`/`unhide`/`remove` joined in Phase 7,
+ * with the moderation routes (`GET /missions/all`, `POST /missions/{id}/hide`,
+ * `.../unhide`, `.../remove`) that back them.
  *
  * SOURCE:
  * - drone-missions-frontend/.../services/mission.service.ts
@@ -79,6 +80,38 @@ export interface FeedFilters {
   keyword?: string;
   date?: string;
 }
+
+/**
+ * Optional filters for the admin all-missions listing. `page` is 0-based, and
+ * `q` is matched server-side against the mission name *or* the designer's
+ * username. Mirrors the inline parameter object of `MissionService.adminList`.
+ */
+export interface AdminMissionQuery {
+  q?: string;
+  page?: number;
+}
+
+/**
+ * Every status, in lifecycle order — the browser-side twin of `MISSION_STATUSES`
+ * in `src/db/schema.ts`, declared here rather than imported so that pulling a
+ * status list into a client bundle does not pull `drizzle-orm/pg-core` in with
+ * it (the same reason the maps below are declared and not derived). Mirrors
+ * `MISSION_STATUSES` in `models/mission.model.ts`, which the admin overview's
+ * status bars iterate; `satisfies` makes the compiler check the two lists
+ * against the union rather than trusting this copy.
+ *
+ * Unlike `MISSION_LIFECYCLE` this includes `CANCELLED` — a bar chart counts
+ * every bucket, where a progress timeline walks only the happy path.
+ */
+export const MISSION_STATUSES = [
+  "DRAFT",
+  "PUBLISHED",
+  "BIDDING",
+  "AWARDED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+] as const satisfies readonly MissionStatus[];
 
 /** Human-friendly labels for display (badges, detail view). */
 export const MISSION_STATUS_LABELS: Record<MissionStatus, string> = {
@@ -172,6 +205,62 @@ export async function fetchOpenMissions(filters: FeedFilters = {}): Promise<Miss
   const query = params.toString();
   const response = await ensureOk(await apiFetch(query ? `${BASE_URL}?${query}` : BASE_URL));
   return (await response.json()) as Mission[];
+}
+
+/**
+ * Admin: one page of *every* mission on the platform, whatever its status or
+ * moderation state, newest first. Mirrors `adminList`, including its two
+ * omissions: page 0 and a blank `q` are left out of the query string entirely
+ * rather than sent as `page=0`/`q=` (an absent `q` is what the server reads as
+ * "everything"), and `q` is trimmed before it travels.
+ */
+export async function fetchAllMissions(
+  query: AdminMissionQuery = {},
+): Promise<PagedModel<Mission>> {
+  const params = new URLSearchParams();
+  if (query.page && query.page > 0) {
+    params.set("page", String(query.page));
+  }
+  if (query.q?.trim()) {
+    params.set("q", query.q.trim());
+  }
+  const search = params.toString();
+  const response = await ensureOk(
+    await apiFetch(search ? `${BASE_URL}/all?${search}` : `${BASE_URL}/all`),
+  );
+  return (await response.json()) as PagedModel<Mission>;
+}
+
+/**
+ * Admin: take a mission out of the pilot feed (VISIBLE → HIDDEN). Mirrors
+ * `hide`.
+ *
+ * Reversible, and the designer keeps the mission — which is why the UI
+ * confirms it with softer wording than `removeMission` below. The empty `{}`
+ * body Angular sends is dropped for the same reason as the lifecycle calls:
+ * the route takes its whole input from the path plus the caller's token.
+ */
+export async function hideMission(id: number): Promise<Mission> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/${id}/hide`, { method: "POST" }));
+  return (await response.json()) as Mission;
+}
+
+/** Admin: return a hidden mission to the feed (HIDDEN → VISIBLE). Mirrors `unhide`. */
+export async function unhideMission(id: number): Promise<Mission> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/${id}/unhide`, { method: "POST" }));
+  return (await response.json()) as Mission;
+}
+
+/**
+ * Admin: permanently delete the mission — its bids, notifications and ratings
+ * cascade with it (204, no body). Mirrors `remove`.
+ *
+ * A POST, not a DELETE: `DELETE /missions/{id}` is the designer's own
+ * ownership-checked delete, and the source gives moderation its own verb-named
+ * endpoint rather than overloading that one.
+ */
+export async function removeMission(id: number): Promise<void> {
+  await ensureOk(await apiFetch(`${BASE_URL}/${id}/remove`, { method: "POST" }));
 }
 
 /** Only the missions created by the current user. Mirrors `getMine`. */

@@ -13,6 +13,7 @@ import type { users } from "@/db/schema";
  * SOURCE:
  * - drone-missions-backend/.../data/model/User.java
  * - drone-missions-backend/.../web/dto/auth/UserResponse.java
+ * - drone-missions-backend/.../web/dto/user/PublicUserResponse.java
  */
 
 /** The full `users` row, exactly as stored — includes the password hash. */
@@ -29,6 +30,24 @@ export interface UserResponse {
   email: string;
   role: User["role"];
   suspended: boolean;
+  createdAt: Date;
+}
+
+/**
+ * What one account may see about *another* — `GET /api/v1/users/{id}`, the
+ * view behind the profile page. Mirrors `PublicUserResponse` field-for-field
+ * (id, username, role, createdAt).
+ *
+ * Deliberately narrower than `UserResponse`: no `email` (personal data the
+ * marketplace has no reason to hand to strangers — the source's own wording)
+ * and no `suspended`. It is not a `Partial<UserResponse>`/`Omit<>` of it
+ * precisely so that adding a field to the admin view can never widen this one
+ * by accident.
+ */
+export interface PublicUserResponse {
+  id: number;
+  username: string;
+  role: User["role"];
   createdAt: Date;
 }
 

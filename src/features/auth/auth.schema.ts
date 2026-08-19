@@ -3,10 +3,14 @@ import { z } from "zod";
 import { USER_ROLES } from "@/db/schema";
 
 /**
- * Registration request validation (replaces the Jakarta Bean Validation
- * annotations on `RegisterRequest`).
+ * Request-body validation for the auth DTOs (replaces the Jakarta Bean
+ * Validation annotations on `RegisterRequest`, `LoginRequest` and
+ * `NewAdminRequest`).
  *
- * SOURCE: drone-missions-backend/.../web/dto/auth/RegisterRequest.java
+ * SOURCE:
+ * - drone-missions-backend/.../web/dto/auth/RegisterRequest.java
+ * - drone-missions-backend/.../web/dto/auth/LoginRequest.java
+ * - drone-missions-backend/.../web/dto/user/NewAdminRequest.java
  */
 
 /**
@@ -63,3 +67,36 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/**
+ * Mirrors `NewAdminRequest`: `@NotBlank username`, `@NotBlank @Email email`,
+ * `@NotBlank @Size(min = 8, message = "password must be at least 8
+ * characters") password` — as the source DTO's own comment puts it,
+ * "RegisterRequest without a role; it is always ADMIN".
+ *
+ * The missing `role` is the whole point and must not be added back: the role is
+ * fixed by `auth.service.ts`'s `createAdmin`, so a caller cannot mint a
+ * DESIGNER/PILOT through the admin-only endpoint, and cannot smuggle an extra
+ * field past it either — Zod objects strip unknown keys by default, the way
+ * Jackson ignores properties with no record component.
+ *
+ * Every constraint is expressed exactly as `registerSchema` expresses its
+ * identical three, down to the `@NotBlank` check-don't-mutate semantics and the
+ * untrimmed `@Size(min = 8)` measurement — see that schema's comments for why
+ * neither field is `.trim()`-ed. Deliberately declared as its own object rather
+ * than derived from `registerSchema` via `.omit({ role: true })`: the source
+ * keeps two independent DTOs, and a derivation would silently propagate a
+ * future change to the registration body onto this endpoint.
+ */
+export const newAdminSchema = z.object({
+  username: z
+    .string({ error: "username is required" })
+    .refine((value) => value.trim().length > 0, "username is required"),
+  email: z.email("email must be a well-formed email address"),
+  password: z
+    .string({ error: "password is required" })
+    .min(8, "password must be at least 8 characters")
+    .refine((value) => value.trim().length > 0, "password is required"),
+});
+
+export type NewAdminInput = z.infer<typeof newAdminSchema>;

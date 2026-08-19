@@ -1,21 +1,25 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { users } from "@/db/schema";
+import { users, type UserRole } from "@/db/schema";
+import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
 import { NotFoundError } from "@/lib/errors";
 import type { NewUser, User } from "./user.types";
 
 /**
- * User lookup + insert queries (replaces `data.repository.UserRepository`'s
- * `findByEmail`/`existsByEmail` and the id lookup half of
- * `business.service.user.UserService` — `findById`'s "throw if missing"
- * behavior is folded in here rather than left to a separate service, since
- * this phase has no `user.service.ts` yet). Admin `search`/suspend/reactivate
- * queries are not ported here — Phase 7.
+ * User lookup, insert and admin-listing queries (replaces
+ * `data.repository.UserRepository`'s `findByEmail`/`existsByEmail`/`search`
+ * and the id lookup half of `business.service.user.UserService` — `findById`'s
+ * "throw if missing" behavior is folded in here rather than left to a separate
+ * service, since Phase 1 had no `user.service.ts` yet).
+ *
+ * The aggregate queries (`countByRoleAndSuspendedFalse`, `countBySuspendedTrue`,
+ * `countByRole`) feed the admin statistics endpoint and are not ported here —
+ * Phase 9.
  *
  * SOURCE:
- * - drone-missions-backend/.../data/repository/UserRepository.java (`findByEmail`, `existsByEmail`)
- * - drone-missions-backend/.../business/service/user/UserService.java (`findById` only)
+ * - drone-missions-backend/.../data/repository/UserRepository.java (`findByEmail`, `existsByEmail`, `search`)
+ * - drone-missions-backend/.../business/service/user/UserService.java (`findById`, the `repository.save` in `suspend`/`reactivate`)
  */
 
 /**
@@ -66,6 +70,76 @@ export async function findById(id: number): Promise<User> {
     throw new UserNotFoundError(id);
   }
   return user;
+}
+
+/**
+ * The admin listing. Mirrors `UserRepository.search`'s
+ * `select u from User u where (:role is null or u.role = :role)` — a null role
+ * means "everyone", the same convention the audit search uses — paged, newest
+ * account first.
+ *
+ * The `createdAt` DESC order is the `@PageableDefault(sort = "createdAt",
+ * direction = DESC)` the controller declares; it lives here rather than
+ * travelling in `PageRequest` because no client ever overrides it (see the
+ * "no `sort`" note in `src/lib/api/paging.ts`).
+ *
+ * Note: `id DESC` is added as a tiebreaker, the same deviation
+ * `notification.queries.ts` documents. The source orders by `created_at`
+ * alone, which leaves rows sharing a timestamp in an unspecified order — and
+ * unspecified order is worse under paging than without it, since a row can
+ * then appear on two pages or on none. Ids are monotonic, so this keeps
+ * "newest first" true rather than arbitrary without reordering any two rows
+ * the source already ordered.
+ *
+ * The count is a second query against the same filter, exactly as Spring Data
+ * issues one for a `Page`. Both run concurrently: they are independent reads,
+ * and a row inserted between them can at worst make `totalElements` disagree
+ * with `content` by one — the same benign race Spring's sequential pair has.
+ */
+export async function search(role: UserRole | null, request: PageRequest): Promise<Page<User>> {
+  const db = getDb();
+  const where = role === null ? undefined : eq(users.role, role);
+  const [content, [total]] = await Promise.all([
+    db
+      .select()
+      .from(users)
+      .where(where)
+      .orderBy(desc(users.createdAt), desc(users.id))
+      .limit(request.size)
+      .offset(offsetOf(request)),
+    db.select({ value: count() }).from(users).where(where),
+  ]);
+  return { content, request, totalElements: total?.value ?? 0 };
+}
+
+/**
+ * Flips one account's `suspended` flag and returns the updated row.
+ *
+ * The port of the `repository.save(user)` inside `UserService.suspend`/
+ * `reactivate`: there, the service mutates the loaded entity and JPA flushes
+ * the dirty column, with `@UpdateTimestamp` restamping `updated_at` on the
+ * way out. Expressed as a targeted `UPDATE` here — the same two columns the
+ * flush would write — rather than a whole-row save, so a concurrent change to
+ * an unrelated column cannot be clobbered by a stale in-memory snapshot.
+ *
+ * Callers only reach this after `findById` has confirmed the account exists,
+ * and nothing in the application ever deletes a user row (moderation suspends,
+ * it never removes), so the "no row matched" branch is unreachable in practice;
+ * it throws rather than returning `undefined` so the impossible case cannot
+ * silently report a suspension that never happened.
+ *
+ * @throws UserNotFoundError if the row disappeared between the lookup and here
+ */
+export async function setSuspended(id: number, suspended: boolean): Promise<User> {
+  const [updated] = await getDb()
+    .update(users)
+    .set({ suspended, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning();
+  if (!updated) {
+    throw new UserNotFoundError(id);
+  }
+  return updated;
 }
 
 /**

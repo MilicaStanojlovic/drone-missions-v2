@@ -20,20 +20,22 @@ import {
  * (`userRegistered`/`userLoggedIn`, where the acting user is also the
  * target), the three designer-actored mission ones from Phase 2
  * (`missionCreated`/`missionUpdated`/`missionDeleted`) and the two
- * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`), and the
+ * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`), the
  * four acceptance/lifecycle ones from Phase 5 (`bidAccepted` plus
- * `missionStarted`/`missionCompleted`/`missionCancelled`), and the one
+ * `missionStarted`/`missionCompleted`/`missionCancelled`), the one
  * rating factory from Phase 6 (`ratingCreated`, the only one whose actor
- * role is *derived* rather than constant); every remaining `NewAuditEntry`
- * factory (mission moderation, admin actions) is added by the phase that
- * introduces the mutation it records.
+ * role is *derived* rather than constant), and the admin-actored ones from
+ * Phase 7 (`userSuspended`/`userReactivated` for user moderation,
+ * `adminCreated` for minting another admin, plus
+ * `missionHidden`/`missionUnhidden`/`missionRemoved` for mission moderation)
+ * — each added by the phase that introduced the mutation it records.
  *
  * `AuditService.search` (the admin listing) is intentionally not ported here
  * — it belongs to the audit *read* path, which lands in Phase 7.
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/audit/AuditService.java (`record` only)
- * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `missionStarted`, `missionCompleted`, `missionCancelled`, `bidPlaced`, `bidWithdrawn`, `bidAccepted`, `ratingCreated`, `self`, `mission`, `quoted`)
+ * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `missionStarted`, `missionCompleted`, `missionCancelled`, `missionHidden`, `missionUnhidden`, `missionRemoved`, `bidPlaced`, `bidWithdrawn`, `bidAccepted`, `ratingCreated`, `userSuspended`, `userReactivated`, `adminCreated`, `self`, `mission`, `quoted`)
  * - drone-missions-backend/.../data/model/AuditAction.java
  * - drone-missions-backend/.../data/model/AuditTargetType.java
  */
@@ -84,15 +86,24 @@ export async function record(entry: NewAuditEntry): Promise<AuditLogRow> {
 }
 
 /**
- * The minimal user shape the self-actored factories below need — id, role,
- * username — never the password hash. Deliberately not `features/users`'
- * `User`/`UserResponse` type: that slice doesn't exist yet in this phase
- * (it's the next task), and this module only needs these three fields.
+ * The minimal user shape the user-targeted factories need — the id they target
+ * and the username they snapshot into `details`. Structural, like
+ * `AuditTargetMission`, so a loaded `User` satisfies it without audit (shared
+ * core) importing the users feature — and never the password hash.
  */
-export interface AuditActorUser {
+export interface AuditTargetUser {
   id: number;
-  role: UserRole;
   username: string;
+}
+
+/**
+ * A user acting on their own account, for the self-actored factories — the
+ * target shape plus the role that becomes `actorRole`. Deliberately not
+ * `features/users`' `User`/`UserResponse` type: this module only needs these
+ * three fields.
+ */
+export interface AuditActorUser extends AuditTargetUser {
+  role: UserRole;
 }
 
 /**
@@ -209,6 +220,40 @@ export function missionStarted(pilotId: number, mission: AuditTargetMission): Ne
 /** Mirrors `NewAuditEntry.missionCompleted` — pilot-actored, like `missionStarted`. */
 export function missionCompleted(pilotId: number, mission: AuditTargetMission): NewAuditEntry {
   return missionEntry(pilotId, "PILOT", "MISSION_COMPLETED", mission);
+}
+
+/**
+ * Mirrors `NewAuditEntry.missionHidden` — ADMIN-actored: moderation is an
+ * admin action on someone else's mission, so unlike the four designer factories
+ * above, the actor is never the mission's owner.
+ *
+ * `MissionService.hide` records this only after the VISIBLE -> HIDDEN
+ * transition actually lands, so a rejected transition (already hidden) leaves
+ * no row — one row means one state change, the same rule
+ * `userSuspended` follows.
+ */
+export function missionHidden(adminId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(adminId, "ADMIN", "MISSION_HIDDEN", mission);
+}
+
+/** Mirrors `NewAuditEntry.missionUnhidden` — the mirror image, HIDDEN -> VISIBLE. */
+export function missionUnhidden(adminId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(adminId, "ADMIN", "MISSION_UNHIDDEN", mission);
+}
+
+/**
+ * Mirrors `NewAuditEntry.missionRemoved` — admin removal, which per
+ * `MissionService.remove`'s javadoc is a *real* delete: the mission's bids,
+ * notifications and ratings cascade away with it and only this row keeps the
+ * history. That is why the entry is built from the mission loaded before the
+ * delete — `details` is the last surviving record of what was removed.
+ *
+ * Distinct from `missionDeleted` (DESIGNER, the owner deleting their own): the
+ * two actions differ in who may do it, so the source gives them separate
+ * `AuditAction` values rather than one delete event with two actors.
+ */
+export function missionRemoved(adminId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(adminId, "ADMIN", "MISSION_REMOVED", mission);
 }
 
 /**
@@ -359,4 +404,68 @@ export function ratingCreated(
     targetId: rating.id,
     details: `${rating.score}/5 on ${quoted(mission.name)}`,
   };
+}
+
+/**
+ * An admin-actored, user-targeted entry: `details` snapshots the *target's*
+ * username, while the actor is the admin who acted.
+ *
+ * The Java factories build these two inline rather than through a shared
+ * helper, but they differ only in their `AuditAction`; one helper here follows
+ * this file's own `missionEntry` precedent and keeps the pair from drifting.
+ * Like every other factory, the role is the constant ADMIN rather than the
+ * actor's looked-up role — it restates the `@PreAuthorize("hasRole('ADMIN')")`
+ * gate the action already passed (here, `requireRole()` in the route layer).
+ */
+function adminUserEntry(
+  adminId: number,
+  action: AuditAction,
+  target: AuditTargetUser,
+): NewAuditEntry {
+  return {
+    actorId: adminId,
+    actorRole: "ADMIN",
+    action,
+    targetType: "USER",
+    targetId: target.id,
+    details: quoted(target.username),
+  };
+}
+
+/**
+ * Mirrors `NewAuditEntry.userSuspended`. Unlike `userRegistered`/`userLoggedIn`,
+ * actor and target are different accounts — the row answers "which admin
+ * suspended whom", which is the whole point of auditing moderation.
+ *
+ * `UserService.suspend` only records this when the account was not already
+ * suspended, so one row means one state change, not one button press.
+ */
+export function userSuspended(adminId: number, target: AuditTargetUser): NewAuditEntry {
+  return adminUserEntry(adminId, "USER_SUSPENDED", target);
+}
+
+/** Mirrors `NewAuditEntry.userReactivated` — the lifting of a suspension, same shape. */
+export function userReactivated(adminId: number, target: AuditTargetUser): NewAuditEntry {
+  return adminUserEntry(adminId, "USER_REACTIVATED", target);
+}
+
+/**
+ * Mirrors `NewAuditEntry.adminCreated` — the row written when one admin mints
+ * another through `POST /api/v1/users/admins`.
+ *
+ * The actor is the **creating admin**, not the new account, which is exactly
+ * what the source's own comment flags as the difference from self-actored
+ * registration: `userRegistered` records the new user as its own actor, while
+ * this records who let them in. The pair is otherwise identical in shape
+ * (targetType USER, `details` = the new admin's quoted username), so both rows
+ * still name the account created even after it is gone.
+ *
+ * It shares `adminUserEntry` with the two moderation factories for the same
+ * reason they share it — admin actor, user target, quoted-username details —
+ * and, like them, hardcodes the ADMIN role rather than looking the actor's up:
+ * a constant that restates the `@PreAuthorize("hasRole('ADMIN')")` the request
+ * already cleared.
+ */
+export function adminCreated(adminId: number, newAdmin: AuditTargetUser): NewAuditEntry {
+  return adminUserEntry(adminId, "ADMIN_CREATED", newAdmin);
 }

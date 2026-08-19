@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
+import type { Page } from "@/lib/api/paging";
 import type { UserRole } from "@/db/schema";
 import type { User } from "@/features/users/user.types";
 import type { Mission } from "@/features/missions/mission.types";
@@ -9,7 +11,9 @@ import type { Mission } from "@/features/missions/mission.types";
  * `GET /api/v1/missions`, `GET /api/v1/missions/my-missions` and
  * `GET|PUT|DELETE /api/v1/missions/{id}` from phase 2, plus the phase-5
  * lifecycle trio `POST /api/v1/missions/{id}/{start,complete,cancel}` and the
- * pilot listing `GET /api/v1/missions/my-jobs`.
+ * pilot listing `GET /api/v1/missions/my-jobs`; from phase 7, the admin
+ * moderation endpoints `GET /api/v1/missions/all` and
+ * `POST /api/v1/missions/{id}/{hide,unhide,remove}`.
  *
  * Mirrors `MissionControllerTest`, which is a Mockito unit test of the
  * controller rather than a live-database one: `MissionService` and
@@ -33,6 +37,13 @@ import type { Mission } from "@/features/missions/mission.types";
  * the errors the service raises, since mapping those to status codes is what
  * the route layer contributes.
  *
+ * The 401 cases of the phase-7 admin endpoints go through `middleware()`
+ * itself, the layer that actually rejects an anonymous caller in the deployed
+ * app (none of these paths are in its `PUBLIC_PATHS`), following the precedent
+ * of `src/app/api/v1/users/routes.test.ts`. The 403 cases call the handlers
+ * with a verified non-admin's headers, since `requireRole()` is what stands in
+ * for `@PreAuthorize("hasRole('ADMIN')")`.
+ *
  * SOURCE:
  * - drone-missions-backend/.../web/controller/mission/MissionController.java
  * - test drone-missions-backend/.../web/controller/mission/MissionControllerTest.java
@@ -48,6 +59,10 @@ const deleteMissionMock = vi.fn();
 const startMock = vi.fn();
 const completeMock = vi.fn();
 const cancelMock = vi.fn();
+const searchAllMock = vi.fn();
+const hideMock = vi.fn();
+const unhideMock = vi.fn();
+const removeMock = vi.fn();
 vi.mock("@/features/missions/mission.service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/missions/mission.service")>();
   return {
@@ -62,6 +77,10 @@ vi.mock("@/features/missions/mission.service", async (importOriginal) => {
     start: (...args: unknown[]) => startMock(...args),
     complete: (...args: unknown[]) => completeMock(...args),
     cancel: (...args: unknown[]) => cancelMock(...args),
+    searchAll: (...args: unknown[]) => searchAllMock(...args),
+    hide: (...args: unknown[]) => hideMock(...args),
+    unhide: (...args: unknown[]) => unhideMock(...args),
+    remove: (...args: unknown[]) => removeMock(...args),
   };
 });
 
@@ -85,16 +104,22 @@ import {
 } from "@/features/missions/mission.service";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
+import { middleware } from "@/middleware";
 import { GET as feedRoute, POST as createRoute } from "./route";
 import { GET as myMissionsRoute } from "./my-missions/route";
 import { GET as myJobsRoute } from "./my-jobs/route";
+import { GET as adminListRoute } from "./all/route";
 import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
 import { POST as startRoute } from "./[id]/start/route";
 import { POST as completeRoute } from "./[id]/complete/route";
 import { POST as cancelRoute } from "./[id]/cancel/route";
+import { POST as hideRoute } from "./[id]/hide/route";
+import { POST as unhideRoute } from "./[id]/unhide/route";
+import { POST as removeRoute } from "./[id]/remove/route";
 
 const DESIGNER_ID = 7;
 const PILOT_ID = 42;
+const ADMIN_ID = 80;
 
 /** The context Next.js hands a non-dynamic route handler. */
 const listContext = { params: Promise.resolve({}) };
@@ -1087,5 +1112,426 @@ describe("GET /api/v1/missions/my-jobs", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([]);
+  });
+});
+
+/** `new PageImpl<>(List.of(mission), pageable, total)`. */
+function page(
+  content: Mission[],
+  pageIndex: number,
+  size: number,
+  totalElements: number,
+): Page<Mission> {
+  return { content, request: { page: pageIndex, size }, totalElements };
+}
+
+describe("GET /api/v1/missions/all (the admin listing)", () => {
+  it("wraps the page and survives a mission with no owner (adminListWrapsThePageAndSurvivesAMissionWithNoOwner)", async () => {
+    searchAllMock.mockResolvedValue(page([legacyMission()], 0, 20, 1));
+
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all?q=orchard", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.content).toHaveLength(1);
+    // The ownerless row still renders: `ratingOf` answers `NONE` for a null
+    // designer id rather than looking it up in an immutable empty map.
+    expect(body.content[0]).toMatchObject({
+      id: 1,
+      userId: null,
+      designerEmail: null,
+      designerName: null,
+      designerSuspended: false,
+      designerRating: 0,
+      designerRatingCount: 0,
+    });
+    expect(searchAllMock).toHaveBeenCalledWith("orchard", { page: 0, size: 20 });
+    // `verify(service, never()).findOpen(any(), any(), any())` — the admin
+    // listing is not the open feed with a filter bolted on.
+    expect(findOpenMock).not.toHaveBeenCalled();
+  });
+
+  it("enriches every row with its designer's rating in one aggregate query", async () => {
+    searchAllMock.mockResolvedValue(page([ownedMission(), ownedMission({ id: 2 })], 0, 20, 2));
+    summariesForMock.mockResolvedValue(new Map([[DESIGNER_ID, { average: 4.5, count: 12 }]]));
+
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(body.content[0]).toMatchObject({ designerRating: 4.5, designerRatingCount: 12 });
+    expect(body.content[1]).toMatchObject({ designerRating: 4.5, designerRatingCount: 12 });
+    // One lookup for the whole page, not one per card.
+    expect(summariesForMock).toHaveBeenCalledTimes(1);
+    expect(summariesForMock).toHaveBeenCalledWith([DESIGNER_ID, DESIGNER_ID]);
+    expect(summaryForMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the PagedModel envelope the Angular pager reads", async () => {
+    searchAllMock.mockResolvedValue(page([legacyMission()], 1, 5, 6));
+
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all?page=1&size=5", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(searchAllMock).toHaveBeenCalledWith(null, { page: 1, size: 5 });
+    expect(body.page).toEqual({ size: 5, number: 1, totalElements: 6, totalPages: 2 });
+  });
+
+  it("applies the @PageableDefault of size 20, page 0 when the query string is empty", async () => {
+    searchAllMock.mockResolvedValue(page([], 0, 20, 0));
+
+    await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+
+    // A missing `q` reaches the service as null — "everything".
+    expect(searchAllMock).toHaveBeenCalledWith(null, { page: 0, size: 20 });
+  });
+
+  it("forwards q verbatim — normalising it into a LIKE pattern is the service's job", async () => {
+    searchAllMock.mockResolvedValue(page([], 0, 20, 0));
+
+    await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all?q=%20Orchard%20", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+
+    expect(searchAllMock).toHaveBeenCalledWith(" Orchard ", { page: 0, size: 20 });
+  });
+
+  it("returns an empty page (not 404) when nothing matches", async () => {
+    searchAllMock.mockResolvedValue(page([], 0, 20, 0));
+
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all?q=nothing", ADMIN_ID, "ADMIN"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.content).toEqual([]);
+    expect(body.page).toEqual({ size: 20, number: 0, totalElements: 0, totalPages: 0 });
+  });
+
+  it("rejects a designer with 403 and never reaches the service (hasRole('ADMIN'))", async () => {
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all", DESIGNER_ID, "DESIGNER"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({
+      data: null,
+      status: "FORBIDDEN",
+      message: "You do not have permission to perform this action",
+    });
+    expect(searchAllMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pilot with 403 — this listing shows hidden and cancelled missions", async () => {
+    const response = await adminListRoute(
+      getRequest("http://localhost/api/v1/missions/all", PILOT_ID, "PILOT"),
+      listContext,
+    );
+
+    expect(response.status).toBe(403);
+    expect(searchAllMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an anonymous request with 401 at the middleware layer", async () => {
+    const response = await middleware(
+      new NextRequest(new URL("http://localhost/api/v1/missions/all")),
+    );
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/missions/{id}/hide", () => {
+  it("hides the mission and answers 200 with the updated MissionResponse", async () => {
+    hideMock.mockResolvedValue(ownedMission({ moderation: "HIDDEN" }));
+
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/hide", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ id: 1, moderation: "HIDDEN", designerName: "dana" });
+  });
+
+  it("hands the service the mission id and the acting admin from the token", async () => {
+    hideMock.mockResolvedValue(ownedMission({ moderation: "HIDDEN" }));
+
+    await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/hide?userId=99", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+
+    // Never the query string: the audit row names the verified caller.
+    expect(hideMock).toHaveBeenCalledWith(1, ADMIN_ID);
+  });
+
+  it("rejects a designer with 403 and hides nothing — even their own mission", async () => {
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/hide", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: "You do not have permission to perform this action",
+    });
+    expect(hideMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pilot with 403", async () => {
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/hide", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(hideMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 409 for an already hidden mission — hiding is not idempotent", async () => {
+    hideMock.mockRejectedValue(
+      new MissionConflictError("Mission 1 cannot go from HIDDEN to HIDDEN"),
+    );
+
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/hide", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      status: "CONFLICT",
+      message: "Mission 1 cannot go from HIDDEN to HIDDEN",
+    });
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    hideMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/9/hide", ADMIN_ID, "ADMIN"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-numeric id with 400 and hides nothing", async () => {
+    const response = await hideRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/hide", ADMIN_ID, "ADMIN"),
+      idContext("abc"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.data).toMatchObject({ id: "must be a number" });
+    expect(hideMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an anonymous request with 401 at the middleware layer", async () => {
+    const response = await middleware(
+      new NextRequest(new URL("http://localhost/api/v1/missions/1/hide")),
+    );
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/missions/{id}/unhide", () => {
+  it("returns the mission to the marketplace and answers 200 with the MissionResponse", async () => {
+    unhideMock.mockResolvedValue(ownedMission({ moderation: "VISIBLE" }));
+
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/unhide", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ id: 1, moderation: "VISIBLE" });
+    expect(unhideMock).toHaveBeenCalledWith(1, ADMIN_ID);
+  });
+
+  it("rejects a designer with 403 and unhides nothing", async () => {
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/unhide", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(unhideMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pilot with 403", async () => {
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/unhide", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(unhideMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 409 for a mission that is not currently hidden", async () => {
+    unhideMock.mockRejectedValue(
+      new MissionConflictError("Mission 1 cannot go from VISIBLE to VISIBLE"),
+    );
+
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/1/unhide", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.message).toBe("Mission 1 cannot go from VISIBLE to VISIBLE");
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    unhideMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/9/unhide", ADMIN_ID, "ADMIN"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-numeric id with 400 and unhides nothing", async () => {
+    const response = await unhideRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/unhide", ADMIN_ID, "ADMIN"),
+      idContext("abc"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(unhideMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an anonymous request with 401 at the middleware layer", async () => {
+    const response = await middleware(
+      new NextRequest(new URL("http://localhost/api/v1/missions/1/unhide")),
+    );
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/missions/{id}/remove", () => {
+  it("deletes the mission and answers 204 with no body", async () => {
+    removeMock.mockResolvedValue(undefined);
+
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/remove", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+
+    // 204, not 200 with a MissionResponse: the mission no longer exists to
+    // be returned, and the rating lookup a response body would need is never
+    // made.
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe("");
+    expect(summaryForMock).not.toHaveBeenCalled();
+  });
+
+  it("hands the service the mission id and the acting admin from the token", async () => {
+    removeMock.mockResolvedValue(undefined);
+
+    await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/remove?userId=99", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+
+    // The audit row is the only trace a hard delete leaves, so it must name
+    // the verified caller and never a query parameter.
+    expect(removeMock).toHaveBeenCalledWith(1, ADMIN_ID);
+  });
+
+  it("rejects a designer with 403 and deletes nothing — even their own mission", async () => {
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/remove", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: "You do not have permission to perform this action",
+    });
+    expect(removeMock).not.toHaveBeenCalled();
+    // And the owner's own `DELETE /api/v1/missions/{id}` is a different path
+    // entirely — this one never reaches it.
+    expect(deleteMissionMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pilot with 403", async () => {
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/remove", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(removeMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    removeMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/9/remove", ADMIN_ID, "ADMIN"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("removes a mission in any state — there is no status guard on this path", async () => {
+    removeMock.mockResolvedValue(undefined);
+
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/remove", ADMIN_ID, "ADMIN"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(204);
+    expect(removeMock).toHaveBeenCalledWith(1, ADMIN_ID);
+  });
+
+  it("rejects a non-numeric id with 400 and deletes nothing", async () => {
+    const response = await removeRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/remove", ADMIN_ID, "ADMIN"),
+      idContext("abc"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.data).toMatchObject({ id: "must be a number" });
+    expect(removeMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an anonymous request with 401 at the middleware layer", async () => {
+    const response = await middleware(
+      new NextRequest(new URL("http://localhost/api/v1/missions/1/remove")),
+    );
+    expect(response.status).toBe(401);
   });
 });
