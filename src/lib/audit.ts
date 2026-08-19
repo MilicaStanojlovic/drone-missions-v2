@@ -22,9 +22,10 @@ import {
  * (`missionCreated`/`missionUpdated`/`missionDeleted`) and the two
  * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`), and the
  * four acceptance/lifecycle ones from Phase 5 (`bidAccepted` plus
- * `missionStarted`/`missionCompleted`/`missionCancelled`); every
- * remaining `NewAuditEntry` factory (mission moderation,
- * rating, admin actions) is added by the phase that
+ * `missionStarted`/`missionCompleted`/`missionCancelled`), and the one
+ * rating factory from Phase 6 (`ratingCreated`, the only one whose actor
+ * role is *derived* rather than constant); every remaining `NewAuditEntry`
+ * factory (mission moderation, admin actions) is added by the phase that
  * introduces the mutation it records.
  *
  * `AuditService.search` (the admin listing) is intentionally not ported here
@@ -32,7 +33,7 @@ import {
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/audit/AuditService.java (`record` only)
- * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `missionStarted`, `missionCompleted`, `missionCancelled`, `bidPlaced`, `bidWithdrawn`, `bidAccepted`, `self`, `mission`, `quoted`)
+ * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `missionStarted`, `missionCompleted`, `missionCancelled`, `bidPlaced`, `bidWithdrawn`, `bidAccepted`, `ratingCreated`, `self`, `mission`, `quoted`)
  * - drone-missions-backend/.../data/model/AuditAction.java
  * - drone-missions-backend/.../data/model/AuditTargetType.java
  */
@@ -296,5 +297,66 @@ export function bidAccepted(designerId: number, bid: AuditTargetBid): NewAuditEn
     targetType: "BID",
     targetId: bid.id,
     details: `${bid.amount} on ${quoted(bid.mission.name)}`,
+  };
+}
+
+/**
+ * The mission shape `ratingCreated` needs. Unlike `AuditTargetMission` it is
+ * not the *target* of the entry (the rating is) — it supplies the name that
+ * goes into `details` and the designer id the actor role is derived from.
+ *
+ * `userId` is the `designer` relation's FK column, i.e. the port of
+ * `mission.getDesignerId()`; it is nullable for the same reason the Java getter
+ * is null-tolerant — an ownerless legacy mission has no designer. Reusing
+ * `AuditTargetMission["name"]` keeps the two mission shapes from drifting, the
+ * same way `AuditTargetBid` reuses it.
+ */
+export interface AuditRatingMission extends Pick<AuditTargetMission, "name"> {
+  /** The owning designer's id — `mission.user_id`, null on legacy rows. */
+  userId: number | null;
+}
+
+/**
+ * The saved rating an entry targets — the id it points at and the score it
+ * snapshots. The Java factory reads exactly these two off the entity
+ * (`rating.getId()`, `rating.getScore()`), so a loaded `Rating` from
+ * `features/ratings` satisfies this structurally without audit (shared core)
+ * importing the ratings feature.
+ */
+export interface AuditTargetRating {
+  id: number;
+  score: number;
+}
+
+/**
+ * Mirrors `NewAuditEntry.ratingCreated` — details are
+ * `"{score}/5 on \"{missionName}\""`.
+ *
+ * The **only** factory here whose `actorRole` is derived rather than constant,
+ * and deliberately so: the other actions are each gated to one role, but both
+ * sides of a completed mission may rate, so the role has to say *which* side
+ * this rater was. The source's rule is reproduced exactly — the rater is the
+ * DESIGNER if they own the mission and the PILOT otherwise, with no third
+ * possibility, because `RatingService.counterpartOf` has already rejected
+ * anyone who is neither (`NotMissionParticipantError`).
+ *
+ * A null `mission.userId` therefore yields PILOT, matching Java's
+ * `raterId.equals(null)` returning false rather than throwing.
+ *
+ * Called after the insert, never before: `targetId` is the identity id the
+ * database assigns, so the entry can only be built from the *saved* row.
+ */
+export function ratingCreated(
+  raterId: number,
+  mission: AuditRatingMission,
+  rating: AuditTargetRating,
+): NewAuditEntry {
+  return {
+    actorId: raterId,
+    actorRole: raterId === mission.userId ? "DESIGNER" : "PILOT",
+    action: "RATING_CREATED",
+    targetType: "RATING",
+    targetId: rating.id,
+    details: `${rating.score}/5 on ${quoted(mission.name)}`,
   };
 }

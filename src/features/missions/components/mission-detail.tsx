@@ -10,6 +10,9 @@ import { Toast, useToast } from "@/components/toast";
 import { getRole, getUserId } from "@/features/auth/auth.client";
 import { fetchBidsForMission, type Bid } from "@/features/bids/bid.client";
 import { BidsPanel } from "@/features/bids/components/bids-panel";
+import { fetchRatingsForMission, type Rating } from "@/features/ratings/rating.client";
+import { RatingForm } from "@/features/ratings/components/rating-form";
+import { RatingNote } from "@/features/ratings/components/rating-note";
 import { RatingStars } from "@/features/ratings/components/rating-stars";
 import { MissionMap } from "./mission-map";
 import {
@@ -51,9 +54,6 @@ import type { MissionStatus } from "../mission.types";
  * whose `startTime` has passed still reads AWARDED until its pilot presses
  * Start (see `mission.service.ts`).
  *
- * Still NOT ported here: the ratings panel, whose `RatingService.forMission`
- * is Phase 6 and does not exist yet (a stubbed control that 404s is worse
- * parity than an absent one).
  * The read-only status timeline IS ported: it is derived purely from
  * `mission.status`, which this phase's API already returns, and it is what
  * makes the status badge legible.
@@ -66,10 +66,16 @@ import type { MissionStatus } from "../mission.types";
  * the action: the bids panel keeps its own `useToast` for the bid actions, and
  * this one has its own for the three lifecycle actions (`useToast` is a hook,
  * not the source's root-provided singleton, so each is independent — only one
- * of them can ever have a toast up, because only one of them acted). Delete is
- * the exception, keeping the treatment the phase-2 port gave it: a failure
- * surfaces inline, and a success is announced by the navigation itself,
- * exactly as the source navigates away.
+ * of them can ever have a toast up, because only one of them acted). The rate
+ * form is the exception that has to borrow this one: rating unmounts it, so a
+ * toast it owned would not outlive the action that raised it. Delete keeps the
+ * treatment the phase-2 port gave it: a failure surfaces inline, and a success
+ * is announced by the navigation itself, exactly as the source navigates away.
+ *
+ * Phase 6 fills in the ratings panel the phase-5 note above left pending: the
+ * `loadRatings` gate, the `isParticipant` / `canRate` / `myRating` /
+ * `ratingOfMe` / `counterpartName` getters, and the third `<aside>` — the rate
+ * form for whoever has not rated yet, then a `RatingNote` in each direction.
  *
  * SOURCE: drone-missions-frontend/.../components/mission-detail/mission-detail.component.{ts,html,css}
  */
@@ -94,6 +100,19 @@ const BTN_DANGER = cn(BTN, "bg-[#e04a3f] font-semibold text-white hover:enabled:
 
 const CARD = "bg-card rounded-xl border border-[#e8edf2] shadow-[0_1px_2px_rgba(20,35,55,0.04)]";
 const META_LABEL = "font-mono text-[9.5px] tracking-[0.08em] text-[#a2afbc] uppercase";
+
+/**
+ * The `.panel*` trio the ratings aside shares with the bids aside — same
+ * classes `BidsPanel` carries, because in the source they are the same
+ * `.panel` / `.panel__head` / `.panel__title` / `.panel__body` / `.panel__empty`
+ * rules on both asides.
+ */
+const PANEL =
+  "bg-card overflow-hidden rounded-xl border border-[#e8edf2] shadow-[0_1px_2px_rgba(20,35,55,0.04),0_8px_24px_rgba(20,35,55,0.05)]";
+const PANEL_HEAD = "flex items-center justify-between border-b border-[#eef2f6] px-[18px] py-4";
+const PANEL_TITLE = "text-foreground text-[15px] font-semibold";
+const PANEL_BODY = "px-[18px] py-4";
+const PANEL_EMPTY = "px-5 py-[34px] text-center text-[13.5px] text-[#93a1b0]";
 
 /**
  * The winning pilot's lifecycle card at the top of the bids aside (`.finish`
@@ -156,6 +175,14 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   const [error, setError] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
+  /** Both directions for this mission; empty until it completes. Ports `ratings`. */
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  /**
+   * Bumped by `onRated` to re-run the ratings read — the effect below has no
+   * other input that changes when a rating is written, so this is what stands
+   * in for the source calling `loadRatings(mission)` a second time by hand.
+   */
+  const [ratingsReload, setRatingsReload] = useState(0);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   /** The three lifecycle confirmations. Port `pendingStart` / `pendingComplete` / `pendingCancel`. */
@@ -234,6 +261,70 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   const canStart = isWinner && mission?.status === "AWARDED";
   /** The owning designer can cancel any mission that isn't finished yet. Ports `canCancel`. */
   const canCancel = isOwner && !["COMPLETED", "CANCELLED"].includes(mission?.status ?? "");
+
+  // ---- ratings ----
+  /** Either side of this mission — the same test the backend applies. Ports `isParticipant`. */
+  const isParticipant =
+    mission !== null &&
+    userId !== null &&
+    (mission.userId === userId || mission.awardedPilotId === userId);
+  /**
+   * Ports `loadRatings`'s gate: only participants may read a mission's ratings,
+   * and only a completed mission has any, so anyone else would just collect a
+   * 403.
+   */
+  const ratingsReadable = mission?.status === "COMPLETED" && isParticipant;
+
+  /**
+   * Ports `loadRatings`. The source calls it from `load()` with the mission it
+   * just received; here it is an effect instead, because `isParticipant` needs
+   * `userId`, which is decoded from the stored JWT in a mount effect and so is
+   * not necessarily known yet when the mission arrives — an imperative call at
+   * load time would read `null` and skip the fetch for good. Keying on
+   * `ratingsReadable` re-runs it the moment either input becomes true, and
+   * clears the list whenever it goes false (the source's `ratings = []` arm).
+   *
+   * A failure is logged and left at that, as the source does — the ratings are
+   * a panel on the page, not the page.
+   */
+  useEffect(() => {
+    if (!ratingsReadable) {
+      setRatings([]);
+      return;
+    }
+    let cancelled = false;
+    fetchRatingsForMission(missionId)
+      .then((loaded) => {
+        if (!cancelled) {
+          setRatings(loaded);
+        }
+      })
+      .catch((ratingsError: unknown) => console.error("Failed to load ratings", ratingsError));
+    return () => {
+      cancelled = true;
+    };
+  }, [missionId, ratingsReadable, ratingsReload]);
+
+  /** What the caller left, if they have rated. Ports `myRating`. */
+  const myRating = ratings.find((rating) => rating.raterId === userId) ?? null;
+  /** What the other side left about the caller. Ports `ratingOfMe`. */
+  const ratingOfMe = ratings.find((rating) => rating.rateeId === userId) ?? null;
+  /** A completed mission you took part in is rateable, once, by you. Ports `canRate`. */
+  const canRate = ratingsReadable && !myRating;
+  /** The accepted bid is where the winning pilot's name already lives. */
+  const awardedPilotName = bids.find((bid) => bid.status === "ACCEPTED")?.pilotName;
+  /**
+   * Who the caller is rating: the designer sees the pilot, the pilot sees the
+   * designer. Ports `counterpartName`.
+   *
+   * Still NOT ported here: the aside's "View {counterpartName}'s profile" link
+   * (`mission-detail.component.html`, and the `counterpartId` getter behind
+   * it). It routes to `/users/:id`, the public profile page that needs
+   * `GET /users/{id}` — both of which `MIGRATION_PLAN.md` §Phase 7 owns and
+   * `PLAN-ratings.md` fences off. Add the link, and `counterpartId` beside this
+   * getter, when that endpoint lands.
+   */
+  const counterpartName = isOwner ? awardedPilotName : mission?.designerName;
 
   /** Where the user came from, so "Back" returns there (e.g. 'my-bids'). Ports `from`. */
   const from = searchParams.get("from") ?? "";
@@ -587,6 +678,59 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
                 ))
               }
             />
+          )}
+
+          {/*
+            The ratings panel — the same for both sides, so it sits outside the
+            role branch the bids aside makes, exactly as the source's third
+            `.detail__grid` child does. Auto-placement therefore lands it in
+            column 1 of row 2 (under the brief) on a wide screen and in the
+            single stack below `lg`, which is where the source puts it too.
+          */}
+          {ratingsReadable && mission && (
+            <aside className={PANEL}>
+              <div className={PANEL_HEAD}>
+                <span className={PANEL_TITLE}>Rating</span>
+              </div>
+              <div className={PANEL_BODY}>
+                {canRate && (
+                  <RatingForm
+                    missionId={mission.id}
+                    counterpartName={counterpartName}
+                    onRated={() => setRatingsReload((n) => n + 1)}
+                    /*
+                      The rate form raises its feedback through *this*
+                      component's toast rather than one of its own, because
+                      `onRated` re-reads the ratings and so unmounts the form:
+                      a toast it owned would go with it after one GET instead
+                      of the source's 2800 ms. In Angular the same message
+                      survives because `ToastService` is root-provided and the
+                      single `<app-toast>` sits in `app.component.html`.
+                    */
+                    show={show}
+                  />
+                )}
+
+                {myRating && (
+                  <RatingNote
+                    rating={myRating}
+                    label={`You rated ${counterpartName || "the other side"}`}
+                  />
+                )}
+
+                {ratingOfMe ? (
+                  <RatingNote
+                    rating={ratingOfMe}
+                    label={`${ratingOfMe.raterName} rated you`}
+                    bordered
+                  />
+                ) : (
+                  <div className={PANEL_EMPTY}>
+                    {counterpartName || "The other side"} hasn’t rated you yet.
+                  </div>
+                )}
+              </div>
+            </aside>
           )}
         </div>
       </main>

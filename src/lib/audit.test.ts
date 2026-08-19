@@ -12,6 +12,7 @@ import {
   missionDeleted,
   missionStarted,
   missionUpdated,
+  ratingCreated,
   record,
   userLoggedIn,
   userRegistered,
@@ -40,9 +41,9 @@ const hasDb = Boolean(process.env.DATABASE_URL);
  * (`designerFactoriesPairRoleActionAndNameSnapshot`, plus the
  * updated/deleted actions) plus `pilotFactoriesUseThePilotRole`; its
  * `bidFactoriesSnapshotAmountAndMissionName` case is mirrored in the next
- * block. Its remaining cases belong to factories that are still not ported:
- * the moderation mission ones (Phase 7), the rating one (Phase 6), and the
- * admin user ones
+ * block, and `ratingRoleIsDerivedFromWhichParticipantRated` in the one after
+ * that. Its remaining cases belong to factories that are still not ported: the
+ * moderation mission ones (Phase 7) and the admin user ones
  * (Phase 7). `userFactoriesTargetTheUserAndSnapshotTheUsername`'s
  * `userSuspended`/`userReactivated` half is Phase 7 too; the self-actored
  * `selfActionsCarryTheUsersOwnRole` case is covered live below.
@@ -196,6 +197,55 @@ describe("bid audit factories", () => {
     expect(bidPlaced(5, { id: 8, amount: 1500.5, mission: { name: null } }, false).details).toBe(
       '1500.5 on "null"',
     );
+  });
+});
+
+/**
+ * Mirrors `NewAuditEntryTest.ratingRoleIsDerivedFromWhichParticipantRated` —
+ * the one JUnit case for the only factory here whose `actorRole` is derived
+ * rather than constant. The service-level effects (that a rejected rating
+ * audits nothing, and that the entry is built from the *saved* row) belong to
+ * `features/ratings/rating.service.test.ts`; this block pins the factory's own
+ * role/action/target/details, the way the mission and bid blocks above do.
+ */
+describe("rating audit factories", () => {
+  const mission = { name: "Orchard survey", userId: 7 };
+  const rating = { id: 11, score: 4 };
+
+  it("ratingRoleIsDerivedFromWhichParticipantRated — the mission's designer rates as DESIGNER", () => {
+    expect(ratingCreated(7, mission, rating)).toEqual({
+      actorId: 7,
+      actorRole: "DESIGNER",
+      action: "RATING_CREATED",
+      targetType: "RATING",
+      targetId: 11,
+      details: '4/5 on "Orchard survey"',
+    });
+  });
+
+  it("ratingRoleIsDerivedFromWhichParticipantRated — anyone else rates as PILOT", () => {
+    expect(ratingCreated(5, mission, rating)).toEqual({
+      actorId: 5,
+      actorRole: "PILOT",
+      action: "RATING_CREATED",
+      targetType: "RATING",
+      targetId: 11,
+      details: '4/5 on "Orchard survey"',
+    });
+  });
+
+  it("treats an ownerless mission's rater as the pilot", () => {
+    // Java's `raterId.equals(null)` is false rather than a throw, so a legacy
+    // mission with no designer still yields a role — PILOT.
+    expect(ratingCreated(5, { name: "Orchard survey", userId: null }, rating).actorRole).toBe(
+      "PILOT",
+    );
+  });
+
+  it("renders an unnamed mission the way String.formatted(null) does", () => {
+    // `quoted(null)` renders the literal `"null"` here exactly as it does for
+    // the mission and bid factories; the score keeps its `{n}/5` shape.
+    expect(ratingCreated(7, { name: null, userId: 7 }, rating).details).toBe('4/5 on "null"');
   });
 });
 
