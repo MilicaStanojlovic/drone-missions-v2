@@ -1,4 +1,5 @@
 import { apiFetch } from "@/features/auth/auth.client";
+import { ensureOk } from "@/lib/api/client";
 import type { MissionResponse } from "./mission.mapper";
 import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "./mission.types";
 
@@ -138,49 +139,16 @@ export const WAYPOINT_ACTION_ICONS: Record<WaypointAction, string> = {
   HOVER: '<circle cx="12" cy="12" r="7.5" /><path d="M12 7.5V12l3 1.8" />',
 };
 
-/** The `{ data, status, message }` envelope every API error carries (see `withErrorHandling`). */
-export interface ApiErrorBody {
-  /** A field -> message map for a 400 from a Zod schema; null otherwise. */
-  data: unknown;
-  status: string;
-  message: string;
-}
-
 /**
- * A non-2xx API response, thrown by every helper below.
- *
- * This is the stand-in for the `HttpErrorResponse` Angular's HttpClient
- * throws: `fetch` resolves for a 4xx/5xx instead of rejecting, so the parsed
- * error envelope has to be carried on an Error of our own for callers to read
- * the server's field messages out of (the mission form does exactly that).
+ * The API error envelope and the `Error` that carries it. Both moved to
+ * `@/lib/api/client` in Phase 3, when `bid.client.ts` became the second caller
+ * of the same endpoints' error shape — a second `ApiError` *class* would break
+ * `instanceof` for whichever module did not declare it. Re-exported here so
+ * this module stays the one import site for mission-facing client code.
  */
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly body: ApiErrorBody | null,
-  ) {
-    super(body?.message ?? `Request failed with status ${status}`);
-    this.name = "ApiError";
-  }
-}
+export { ApiError, type ApiErrorBody } from "@/lib/api/client";
 
 const BASE_URL = "/api/v1/missions";
-
-/** Rejects a non-2xx response as an `ApiError` carrying the parsed envelope. */
-async function ensureOk(response: Response): Promise<Response> {
-  if (response.ok) {
-    return response;
-  }
-  let body: ApiErrorBody | null = null;
-  try {
-    body = (await response.json()) as ApiErrorBody;
-  } catch {
-    // A response with no JSON body (or a truncated one) still has to surface
-    // as the same error type — the status alone is what the caller falls back
-    // to, mirroring HttpClient's behaviour for an unparseable error body.
-  }
-  throw new ApiError(response.status, body);
-}
 
 /**
  * The open marketplace — every mission the backend exposes to all users

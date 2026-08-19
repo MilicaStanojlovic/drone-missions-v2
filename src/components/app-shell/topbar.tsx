@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { apiFetch, clearToken } from "@/features/auth/auth.client";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
@@ -26,6 +26,16 @@ const ROLE_DOT_CLASS: Record<UserRole, string> = {
   ADMIN: "bg-role-admin",
 };
 
+/**
+ * One `nav__link`, in its resting and `nav__link--active` forms. The colours
+ * are the canvas's (`design/DroneMissions.dc.html`, its topbar `<nav>`), which
+ * the source CSS matches.
+ */
+const NAV_LINK =
+  "rounded-[7px] px-3 py-[7px] text-[13px] font-medium no-underline transition-colors";
+const NAV_LINK_RESTING = "text-[#5c6b7a] hover:bg-[#f0f3f7] hover:text-foreground";
+const NAV_LINK_ACTIVE = "text-primary bg-[#eef3ff]";
+
 export interface TopbarProps {
   /** The signed-in user's display name, or null while the profile is still loading. */
   username: string | null;
@@ -35,9 +45,10 @@ export interface TopbarProps {
 /**
  * Authenticated app shell topbar (replaces `AppComponent`'s `<header class="nav">`
  * and its `logout()` method): brand mark, profile chip (username + role), and a
- * logout button. Role-specific nav links (My Missions, Browse, Admin section, …)
- * are added by the phases that introduce those routes — none exist in the app
- * yet, so the nav itself is empty for now.
+ * logout button, plus the `nav__links` row. Each role-specific link is added
+ * by the phase that introduces its route, so the row currently holds only the
+ * pilot's "My Bids" (Phase 3); "My Missions" / "New Mission" / "Browse" and
+ * the admin section arrive with their own phases.
  *
  * Unlike `AuthService.logout()` (which is purely local — clears the token,
  * nothing else), this calls the already-ported `POST /api/v1/auth/logout`
@@ -49,6 +60,7 @@ export interface TopbarProps {
  */
 export function Topbar({ username, role }: TopbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     try {
@@ -62,13 +74,35 @@ export function Topbar({ username, role }: TopbarProps) {
   return (
     <header className="border-border bg-card sticky top-0 z-50 border-b">
       <div className="mx-auto flex h-[60px] max-w-[1240px] items-center justify-between gap-4 px-6">
-        <Link
-          href="/"
-          className="text-foreground flex shrink-0 items-center gap-2.5 font-mono text-sm font-semibold tracking-[0.19em]"
-        >
-          <span aria-hidden="true" className="bg-primary h-[15px] w-[15px] rotate-45" />
-          DRONEMISSIONS
-        </Link>
+        <div className="flex min-w-0 items-center gap-[30px]">
+          <Link
+            href="/"
+            className="text-foreground flex shrink-0 items-center gap-2.5 font-mono text-sm font-semibold tracking-[0.19em]"
+          >
+            <span aria-hidden="true" className="bg-primary h-[15px] w-[15px] rotate-45" />
+            DRONEMISSIONS
+          </Link>
+
+          <nav className="flex items-center gap-1">
+            {/* Pilots only, exactly as the source's `@if (auth.isPilot)` gates
+                it. Labelled "My Bids" after the shipped header, not the
+                canvas's "My Bids & Jobs": the jobs half of that mock never
+                existed in the app, and the route is the bid history alone.
+                `routerLinkActive` (no `exact` option on this link) is a prefix
+                match, hence `startsWith`. */}
+            {role === "PILOT" && (
+              <Link
+                href="/my-bids"
+                className={cn(
+                  NAV_LINK,
+                  pathname.startsWith("/my-bids") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                )}
+              >
+                My Bids
+              </Link>
+            )}
+          </nav>
+        </div>
 
         <div className="flex items-center gap-3.5">
           {/* Pilots only — the same `@if (auth.isPilot)` gate the source puts
