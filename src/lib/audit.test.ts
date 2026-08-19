@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import {
+  bidPlaced,
+  bidWithdrawn,
   missionCreated,
   missionDeleted,
   missionUpdated,
@@ -32,9 +34,10 @@ const hasDb = Boolean(process.env.DATABASE_URL);
  * The entry factories are pure functions, so they need no database — these
  * mirror the mission cases of `NewAuditEntryTest`
  * (`designerFactoriesPairRoleActionAndNameSnapshot`, plus the
- * updated/deleted actions). Its remaining cases belong to factories this
- * phase has not ported: the pilot/moderation mission ones (Phases 5/7), the
- * bid ones (Phase 3), the rating one (Phase 6), and the admin user ones
+ * updated/deleted actions); its `bidFactoriesSnapshotAmountAndMissionName`
+ * case is mirrored in the next block. Its remaining cases belong to factories
+ * that are still not ported: the pilot/moderation mission ones (Phases 5/7),
+ * the rating one (Phase 6), and the admin user ones
  * (Phase 7). `userFactoriesTargetTheUserAndSnapshotTheUsername`'s
  * `userSuspended`/`userReactivated` half is Phase 7 too; the self-actored
  * `selfActionsCarryTheUsersOwnRole` case is covered live below.
@@ -79,6 +82,57 @@ describe("mission audit factories", () => {
     // `mission.name` is a nullable column; Java's `"\"%s\"".formatted(null)`
     // yields the literal `"null"`, and so does this.
     expect(missionCreated(7, { id: 4, name: null }).details).toBe('"null"');
+  });
+});
+
+/**
+ * Mirrors `NewAuditEntryTest.bidFactoriesSnapshotAmountAndMissionName`, minus
+ * its final `bidAccepted` assertion — that factory arrives with the accept
+ * flow in Phase 5.
+ *
+ * The Java fixture's `BigDecimal.TEN` becomes the number `10`, and both render
+ * `"10"`, so the source's exact `details` expectation ports across unchanged.
+ * See `bidPlaced`'s note for where the two renderings *do* part ways (a
+ * scale-carrying `BigDecimal` from the `numeric(12, 2)` column).
+ *
+ * SOURCE: drone-missions-backend/.../business/service/audit/NewAuditEntryTest.java
+ */
+describe("bid audit factories", () => {
+  const bid = { id: 8, amount: 10, mission: { id: 4, name: "Orchard survey" } };
+
+  it("bidFactoriesSnapshotAmountAndMissionName — bidPlaced", () => {
+    expect(bidPlaced(5, bid, false)).toEqual({
+      actorId: 5,
+      actorRole: "PILOT",
+      action: "BID_PLACED",
+      targetType: "BID",
+      targetId: 8,
+      details: '10 on "Orchard survey"',
+    });
+  });
+
+  it("marks an upserted bid with the (updated) suffix", () => {
+    expect(bidPlaced(5, bid, true).details).toBe('10 on "Orchard survey" (updated)');
+    expect(bidPlaced(5, bid, true).details?.endsWith("(updated)")).toBe(true);
+  });
+
+  it("bidWithdrawn keeps the pilot role and the same snapshot, without the suffix", () => {
+    expect(bidWithdrawn(5, bid)).toEqual({
+      actorId: 5,
+      actorRole: "PILOT",
+      action: "BID_WITHDRAWN",
+      targetType: "BID",
+      targetId: 8,
+      details: '10 on "Orchard survey"',
+    });
+  });
+
+  it("renders a decimal amount and an unnamed mission", () => {
+    // `quoted(null)` renders the literal `"null"` here exactly as it does for
+    // the mission factories; the amount keeps whatever digits the number has.
+    expect(bidPlaced(5, { id: 8, amount: 1500.5, mission: { name: null } }, false).details).toBe(
+      '1500.5 on "null"',
+    );
   });
 });
 

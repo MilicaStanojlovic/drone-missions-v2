@@ -18,17 +18,20 @@ import {
  * can be silently skipped is not one). This module ships the factories the
  * ported phases need — the two self-actored user ones from Phase 1
  * (`userRegistered`/`userLoggedIn`, where the acting user is also the
- * target) and the three designer-actored mission ones from Phase 2
- * (`missionCreated`/`missionUpdated`/`missionDeleted`); every remaining
- * `NewAuditEntry` factory (mission lifecycle/moderation, bid, rating, admin
- * actions) is added by the phase that introduces the mutation it records.
+ * target), the three designer-actored mission ones from Phase 2
+ * (`missionCreated`/`missionUpdated`/`missionDeleted`) and the two
+ * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`); every
+ * remaining `NewAuditEntry` factory (mission lifecycle/moderation,
+ * `bidAccepted`, rating, admin actions) is added by the phase that
+ * introduces the mutation it records — `bidAccepted` with the accept flow in
+ * Phase 5.
  *
  * `AuditService.search` (the admin listing) is intentionally not ported here
  * — it belongs to the audit *read* path, which lands in Phase 7.
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/audit/AuditService.java (`record` only)
- * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `self`, `mission`, `quoted`)
+ * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `bidPlaced`, `bidWithdrawn`, `self`, `mission`, `quoted`)
  * - drone-missions-backend/.../data/model/AuditAction.java
  * - drone-missions-backend/.../data/model/AuditTargetType.java
  */
@@ -178,3 +181,72 @@ export function missionUpdated(designerId: number, mission: AuditTargetMission):
 export function missionDeleted(designerId: number, mission: AuditTargetMission): NewAuditEntry {
   return missionEntry(designerId, "DESIGNER", "MISSION_DELETED", mission);
 }
+
+/**
+ * The minimal bid shape the two bid factories need — the id they target, the
+ * amount they snapshot, and the mission whose name goes into `details`. The
+ * Java factories read exactly these off the entity (`bid.getId()`,
+ * `bid.getAmount()`, `bid.getMission().getName()`).
+ *
+ * Structural like `AuditTargetMission`, so a loaded `Bid` from
+ * `features/bids` satisfies it without audit (shared core) importing the bids
+ * feature. Only the mission's `name` is required — the nested shape reuses
+ * `AuditTargetMission` so the two never drift apart.
+ */
+export interface AuditTargetBid {
+  id: number;
+  amount: number;
+  mission: Pick<AuditTargetMission, "name">;
+}
+
+/**
+ * Mirrors `NewAuditEntry.bidPlaced` — details are
+ * `"{amount} on \"{missionName}\"{ (updated)}"`.
+ *
+ * `updated` distinguishes the two halves of `place()`'s upsert, exactly as the
+ * source's comment says: "place() upserts, and 'raised an existing bid' is
+ * worth telling apart". It is a required parameter here rather than a
+ * defaulted one, matching the Java signature — every call site already knows
+ * which branch it took.
+ *
+ * KNOWN DIVERGENCE (rendering only, inherited from `Bid.amount` being a
+ * `number`): Java formats a `BigDecimal`, which carries the column's scale, so
+ * a bid loaded from `numeric(12, 2)` renders `"1500.00"`. A JS number has no
+ * scale, so the same bid renders `"1500"` — while `1500.5` renders `"1500.5"`
+ * where Java would say `"1500.50"`. `details` is a human-readable snapshot
+ * that nothing parses, and the alternative (re-introducing the decimal text
+ * into the domain type) would undo the narrowing `bid.types.ts` deliberately
+ * makes. Noted rather than papered over with a `toFixed(2)`, which would
+ * diverge from `NewAuditEntryTest`'s `BigDecimal.TEN` expectation of `"10"`.
+ */
+export function bidPlaced(pilotId: number, bid: AuditTargetBid, updated: boolean): NewAuditEntry {
+  return {
+    actorId: pilotId,
+    actorRole: "PILOT",
+    action: "BID_PLACED",
+    targetType: "BID",
+    targetId: bid.id,
+    details: `${bid.amount} on ${quoted(bid.mission.name)}${updated ? " (updated)" : ""}`,
+  };
+}
+
+/**
+ * Mirrors `NewAuditEntry.bidWithdrawn` — the same `details` snapshot as
+ * `bidPlaced` without the suffix. Snapshotting amount and mission name matters
+ * most here: `withdraw()` deletes the row, so this entry is all that is left
+ * of the bid.
+ */
+export function bidWithdrawn(pilotId: number, bid: AuditTargetBid): NewAuditEntry {
+  return {
+    actorId: pilotId,
+    actorRole: "PILOT",
+    action: "BID_WITHDRAWN",
+    targetType: "BID",
+    targetId: bid.id,
+    details: `${bid.amount} on ${quoted(bid.mission.name)}`,
+  };
+}
+
+// `bidAccepted` (designer-actored, `BID_ACCEPTED`) is deliberately absent: the
+// accept flow it records lands in Phase 5, and this module only ships the
+// factory for a mutation that exists.

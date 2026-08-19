@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { getRole, getUserId } from "@/features/auth/auth.client";
+import { fetchBidsForMission, type Bid } from "@/features/bids/bid.client";
+import { BidsPanel } from "@/features/bids/components/bids-panel";
 import { RatingStars } from "@/features/ratings/components/rating-stars";
 import { MissionMap } from "./mission-map";
 import {
@@ -24,14 +26,15 @@ import type { MissionStatus } from "../mission.types";
  * of the flight plan, telemetry, the brief, and the designer behind it — plus
  * Edit / Delete for the owning designer.
  *
- * Ports the phase-2 half of `MissionDetailComponent` — template, styles and
- * behaviour. Deliberately NOT ported yet, because the APIs behind them do not
- * exist in this app until later phases (a stubbed control that 404s is worse
- * parity than an absent one):
- * - the bids panel, the bid telemetry tile and the `from=my-bids` Back target
- *   (`BidService`, Phase 3);
+ * Ports `MissionDetailComponent` — template, styles and behaviour. Phase 3
+ * adds the bids aside (`BidsPanel`, which owns the pilot's form and the
+ * designer's list), the bid telemetry tile, the `refresh()` that re-reads
+ * mission + bids in place after a bid action, and the `from=my-bids` Back
+ * target the phase-2 port left pending. Still deliberately NOT ported, because
+ * the APIs behind them do not exist in this app until later phases (a stubbed
+ * control that 404s is worse parity than an absent one):
  * - Start / Mark finished / Cancel mission (`MissionService.start/complete/cancel`,
- *   Phase 5);
+ *   Phase 5), and with them the designer's Accept-bid flow (see `BidsPanel`);
  * - the ratings panel (`RatingService.forMission`, Phase 6).
  * The read-only status timeline IS ported: it is derived purely from
  * `mission.status`, which this phase's API already returns, and it is what
@@ -41,10 +44,10 @@ import type { MissionStatus } from "../mission.types";
  * `auth.userId` / `auth.isDesigner` are read after mount because the JWT they
  * decode lives in `localStorage` (see `(app)/layout.tsx` for the same pattern).
  *
- * There is no toast service in this app yet, so the source's `toast.show(...)`
- * calls have no counterpart: a failed delete surfaces inline instead, and a
- * successful one is announced by the navigation itself, exactly as the source
- * navigates away.
+ * The source's `toast.show(...)` feedback arrived with the bids panel (which
+ * owns `useToast`, since it raises all of it). Delete keeps the treatment the
+ * phase-2 port gave it: a failure surfaces inline, and a success is announced
+ * by the navigation itself, exactly as the source navigates away.
  *
  * SOURCE: drone-missions-frontend/.../components/mission-detail/mission-detail.component.{ts,html,css}
  */
@@ -117,6 +120,7 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
+  const [bids, setBids] = useState<Bid[]>([]);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
 
@@ -126,6 +130,17 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   useEffect(() => {
     setRole(getRole());
     setUserId(getUserId());
+  }, []);
+
+  /**
+   * Ports `loadBids`. A failure is logged and left at that — the bids are a
+   * panel on the page, not the page, so a designer whose bid list 500s still
+   * gets the mission (the source makes the same call).
+   */
+  const loadBids = useCallback((id: number) => {
+    fetchBidsForMission(id)
+      .then(setBids)
+      .catch((bidsError: unknown) => console.error("Failed to load bids", bidsError));
   }, []);
 
   // ---- load() ----
@@ -138,6 +153,7 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
         if (!cancelled) {
           setMission(loaded);
           setLoading(false);
+          loadBids(missionId);
         }
       })
       .catch(() => {
@@ -149,16 +165,36 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [missionId]);
+  }, [missionId, loadBids]);
+
+  /**
+   * Re-fetch mission + bids in place (no full-page loading flash) after a bid
+   * action — the mission because the first bid on it flips PUBLISHED to
+   * BIDDING. Ports `refresh()`.
+   */
+  const refresh = useCallback(() => {
+    fetchMission(missionId)
+      .then(setMission)
+      .catch((refreshError: unknown) => console.error("Failed to refresh mission", refreshError));
+    loadBids(missionId);
+  }, [missionId, loadBids]);
 
   const isPilot = role === "PILOT";
   /** Ports `isOwner`. A legacy ownerless mission (`userId: null`) has no owner. */
   const isOwner =
     role === "DESIGNER" && mission !== null && userId !== null && mission.userId === userId;
 
-  /** Ports `backLabel` / `back()`; the `from=my-bids` branch lands in Phase 3 with /my-bids. */
-  const backLabel = isPilot ? "Back to feed" : "My Missions";
+  /** Where the user came from, so "Back" returns there (e.g. 'my-bids'). Ports `from`. */
+  const from = searchParams.get("from") ?? "";
+
+  /** Ports `backLabel` / `back()`. */
+  const backLabel =
+    from === "my-bids" ? "Back to my bids" : isPilot ? "Back to feed" : "My Missions";
   function back(): void {
+    if (from === "my-bids") {
+      router.push("/my-bids");
+      return;
+    }
     if (isPilot) {
       // Replay the feed filters so the marketplace comes back the way it was left.
       const params = new URLSearchParams();
@@ -309,15 +345,14 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
         </div>
 
         {/*
-          `.detail__grid` is `1fr 400px` in the source, the right column being
-          the bids/ratings aside (Phases 3/6). With no aside to place yet, the
-          main column keeps the width that grid gives it — 1240 − 48 padding −
-          400 aside − 20 gap — so the map renders at the size the design
-          intends instead of stretching across the whole page. The grid itself
-          returns when the aside does.
+          `.detail__grid` is a fixed `1fr 400px` in the source; the aside it
+          sizes is now here (the ratings panel joins it in Phase 6). The two
+          columns only split from `lg` up — below that 400px of aside beside
+          the map is narrower than either wants — which is the one place this
+          port improves on a source that has no breakpoint at all.
         */}
-        <div className="grid items-start gap-5">
-          <div className="max-w-[772px]">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0">
             <div className="aspect-[1000/640] overflow-hidden rounded-xl border border-[#d3dbe3] bg-[#eef1ec] shadow-[0_1px_2px_rgba(20,35,55,0.05),0_12px_34px_rgba(20,35,55,0.1)]">
               {waypoints.length > 0 ? (
                 <MissionMap waypoints={waypoints} geofence={mission.geofence} editable={false} />
@@ -328,11 +363,12 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
               )}
             </div>
 
-            <div className="mt-3.5 grid grid-cols-3 gap-2.5">
+            <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               {[
                 { label: "Waypoints", value: `${waypoints.length}` },
                 { label: "Path length", value: distanceText(waypoints) },
                 { label: "Est. flight", value: durationText(waypoints) },
+                { label: "Bids", value: `${bids.length}` },
               ].map((tile) => (
                 <div key={tile.label} className={cn(CARD, "px-[13px] py-3 font-mono")}>
                   <div className={META_LABEL}>{tile.label}</div>
@@ -360,6 +396,16 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
               </div>
             </div>
           </div>
+
+          {/*
+            Held back until the role is known. Unlike Angular's synchronous
+            `auth.isPilot`, the role here is decoded from the stored JWT in a
+            mount effect, so rendering the panel on the first pass would show
+            a pilot the designer's "Bids" list for a frame before it swapped.
+          */}
+          {role !== null && (
+            <BidsPanel mission={mission} bids={bids} isPilot={isPilot} onChanged={refresh} />
+          )}
         </div>
       </main>
 
