@@ -13,6 +13,11 @@ next-env.d.ts
 # typescript
 *.tsbuildinfo
 
+# drizzle-kit output — Flyway owns the schema, nothing legitimately writes
+# here (see src/db/schema.ts); scripts/check-schema-drift.mjs uses its own
+# mkdtempSync temp dirs instead of this directory.
+drizzle/
+
 # builds & coverage
 dist/
 coverage/

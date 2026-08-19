@@ -1,77 +1,90 @@
 export const meta = {
-  name: 'migrate-phase',
-  description: 'Run one migration phase: plan it into a task checklist, implement task-by-task, review for behavior parity, test, with up to 2 fix retries',
-  whenToUse: 'Run once per phase of the drone-missions v2 migration with args {phaseSlug, phaseTitle, phaseSpec, doneWhen}. phaseSpec is the full text of that phase\'s section from MIGRATION_PLAN.md. Returns {status: "passed"|"blocked", planFile, review, test}.',
+  name: "migrate-phase",
+  description:
+    "Run one migration phase: plan it into a task checklist, implement task-by-task, review for behavior parity, test, with up to 2 fix retries",
+  whenToUse:
+    'Run once per phase of the drone-missions v2 migration with args {phaseSlug, phaseTitle, phaseSpec, doneWhen}. phaseSpec is the full text of that phase\'s section from MIGRATION_PLAN.md. Returns {status: "passed"|"blocked", planFile, review, test}.',
   phases: [
-    { title: 'Plan' },
-    { title: 'Implement' },
-    { title: 'Review' },
-    { title: 'Test' },
-    { title: 'Fix' },
+    { title: "Plan" },
+    { title: "Implement" },
+    { title: "Review" },
+    { title: "Test" },
+    { title: "Fix" },
   ],
-}
+};
 
-const TARGET = '/workspace/drone-missionsv2'
-const BACKEND = '/workspace/drone-missions-backend/drone-missions'
-const FRONTEND = '/workspace/drone-missions-frontend/drone-missions-frontend'
+const TARGET = "/workspace/drone-missionsv2";
+const BACKEND = "/workspace/drone-missions-backend/drone-missions";
+const FRONTEND = "/workspace/drone-missions-frontend/drone-missions-frontend";
 
 const TASKS_SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
     tasks: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
-        properties: { title: { type: 'string' } },
-        required: ['title'],
+        type: "object",
+        properties: { title: { type: "string" } },
+        required: ["title"],
       },
     },
   },
-  required: ['tasks'],
-}
+  required: ["tasks"],
+};
 
 const VERDICT_SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
-    green: { type: 'boolean' },
-    report: { type: 'string' },
+    green: { type: "boolean" },
+    report: { type: "string" },
   },
-  required: ['green', 'report'],
-}
+  required: ["green", "report"],
+};
 
-if (!args || typeof args !== 'object' || !args.phaseSlug || !args.phaseSpec) {
-  throw new Error('migrate-phase needs args {phaseSlug, phaseTitle, phaseSpec, doneWhen}')
+if (!args || typeof args !== "object" || !args.phaseSlug || !args.phaseSpec) {
+  throw new Error("migrate-phase needs args {phaseSlug, phaseTitle, phaseSpec, doneWhen}");
 }
-const { phaseSlug, phaseTitle, phaseSpec, doneWhen } = args
-const planFile = `${TARGET}/plans/PLAN-${phaseSlug}.md`
-log(`Phase: ${phaseTitle || phaseSlug} — plan file: ${planFile}`)
+const { phaseSlug, phaseTitle, phaseSpec, doneWhen } = args;
+const planFile = `${TARGET}/plans/PLAN-${phaseSlug}.md`;
+log(`Phase: ${phaseTitle || phaseSlug} — plan file: ${planFile}`);
 
 const repoContext = [
   `Target repo (read+write): ${TARGET}`,
   `Spring backend ground truth (READ ONLY): ${BACKEND}`,
   `Angular frontend ground truth (READ ONLY): ${FRONTEND}`,
   `Full migration plan: ${TARGET}/MIGRATION_PLAN.md`,
-].join('\n')
-
-
+].join("\n");
 
 // Custom agentTypes from .claude/agents/ are not in this session's registry (created after
 // session start), so each subagent instead reads its role file and adopts it.
-const role = (name) => `First, Read ${TARGET}/.claude/agents/${name}.md and adopt the entire body as your role instructions for this task (ignore the frontmatter's tools/model fields — they are for a different invocation path). Follow that role exactly, including its read-only rules on the source repos.`
+const role = (name) =>
+  `First, Read ${TARGET}/.claude/agents/${name}.md and adopt the entire body as your role instructions for this task (ignore the frontmatter's tools/model fields — they are for a different invocation path). Follow that role exactly, including its read-only rules on the source repos.`;
 
 // agent() resolves to null if the subagent dies on a terminal API error (e.g. 529 Overloaded).
 // Re-attempt transient failures instead of crashing the whole phase run.
+// opts.fallbackModel: if the first two attempts die (e.g. opus 529 Overloaded), the third
+// attempt runs on the fallback model instead so the phase keeps moving.
 async function runAgent(prompt, opts) {
+  const { fallbackModel, ...agentOpts } = opts;
   for (let i = 1; i <= 3; i++) {
-    const result = await agent(prompt, i === 1 ? opts : { ...opts, label: `${opts.label || 'agent'}~retry${i - 1}` })
-    if (result !== null && result !== undefined) return result
-    log(`Agent ${opts.label || ''} returned null (attempt ${i}/3)${i < 3 ? ' — retrying' : ''}.`)
+    const useFallback = fallbackModel && i === 3;
+    const attemptOpts = {
+      ...agentOpts,
+      ...(useFallback ? { model: fallbackModel } : {}),
+      label:
+        i === 1
+          ? agentOpts.label
+          : `${agentOpts.label || "agent"}~retry${i - 1}${useFallback ? "-" + fallbackModel : ""}`,
+    };
+    const result = await agent(prompt, attemptOpts);
+    if (result !== null && result !== undefined) return result;
+    log(`Agent ${agentOpts.label || ""} returned null (attempt ${i}/3)${i < 3 ? " — retrying" : ""}.`);
   }
-  throw new Error(`Agent ${opts.label || ''} failed after 3 attempts`)
+  throw new Error(`Agent ${opts.label || ""} failed after 3 attempts`);
 }
 
 // ---- Plan ----
-phase('Plan')
+phase("Plan");
 const plan = await runAgent(
   `You are planning ONE phase of the drone-missions v2 migration (Spring Boot + Angular -> unified Next.js 15 / React 19 / TypeScript / Drizzle / Supabase Postgres). You never write implementation code; produce only a task checklist.
 
@@ -103,56 +116,86 @@ Rules:
 - Keep it tight: prefer 4-10 tasks.
 
 Then return the same list as structured output.`,
-  { schema: TASKS_SCHEMA, phase: 'Plan', label: `plan:${phaseSlug}` }
-)
-log(`Planned ${plan.tasks.length} task(s).`)
+  { schema: TASKS_SCHEMA, phase: "Plan", label: `plan:${phaseSlug}` },
+);
+log(`Planned ${plan.tasks.length} task(s).`);
 
 // ---- Implement ----
-phase('Implement')
+phase("Implement");
 for (const task of plan.tasks) {
   await runAgent(
-    `${role('implementer')}
+    `${role("implementer")}
 
 Implement the next unchecked task in ${planFile} (expected to be: "${task.title}"). Check it off in that file when done.`,
-    { model: 'sonnet', phase: 'Implement', label: task.title } // TEMP: sonnet while opus is overloaded (529s) — revert to opus when it recovers
-  )
+    { model: "opus", fallbackModel: "sonnet", phase: "Implement", label: task.title },
+  );
 }
 
 // ---- Review / Test with fix retries ----
-const MAX_RETRIES = 2
-let review = null
-let test = null
-let attempt = 0
+const MAX_RETRIES = 2;
+let review = null;
+let test = null;
+let attempt = 0;
 
 while (true) {
-  review = await runAgent(
-    `${role('reviewer')}
+  const [reviewR, testR] = await parallel([
+    () => runAgent(
+    `${role("reviewer")}
 
 Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${TARGET} (git diff develop...HEAD, plus untracked files; if develop does not exist yet, review the whole tree). The phase's plan/checklist is ${planFile}; its spec is in MIGRATION_PLAN.md. Compare ported behavior against the ORIGINAL source in ${BACKEND} and ${FRONTEND}. Return structured output: green=true only if your verdict is merge-ready, and put your full findings report (or "merge-ready" summary) in report.`,
-    { model: 'opus', phase: attempt === 0 ? 'Review' : 'Fix', label: `review#${attempt + 1}`, schema: VERDICT_SCHEMA }
-  )
+    {
+      model: "opus",
+      fallbackModel: "sonnet",
+      phase: attempt === 0 ? "Review" : "Fix",
+      label: `review#${attempt + 1}`,
+      schema: VERDICT_SCHEMA,
+    },
+  ),
+    () => runAgent(
+    `${role("tester")}
 
-  test = await runAgent(
-    `${role('tester')}
-
-Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "Done when" criteria: ${doneWhen || 'see the phase section in MIGRATION_PLAN.md'}. Its checklist is ${planFile}. Return structured output: green=true only if your verdict is all-green (environment-caused skips allowed but must be listed in report), and put the full per-check report in report.`,
-    { model: 'sonnet', phase: attempt === 0 ? 'Test' : 'Fix', label: `test#${attempt + 1}`, schema: VERDICT_SCHEMA }
-  )
+Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "Done when" criteria: ${doneWhen || "see the phase section in MIGRATION_PLAN.md"}. Its checklist is ${planFile}. Return structured output: green=true only if your verdict is all-green (environment-caused skips allowed but must be listed in report), and put the full per-check report in report.`,
+    {
+      model: "sonnet",
+      phase: attempt === 0 ? "Test" : "Fix",
+      label: `test#${attempt + 1}`,
+      schema: VERDICT_SCHEMA,
+    },
+  ),
+  ]);
+  review = reviewR ?? { green: false, report: "review agent failed to return a result" };
+  test = testR ?? { green: false, report: "tester agent failed to return a result" };
 
   if (review.green && test.green) {
-    return { status: 'passed', planFile, tasks: plan.tasks, review: review.report, test: test.report, attempts: attempt + 1 }
+    return {
+      status: "passed",
+      planFile,
+      tasks: plan.tasks,
+      review: review.report,
+      test: test.report,
+      attempts: attempt + 1,
+    };
   }
 
   if (attempt >= MAX_RETRIES) {
-    log(`Still not green after ${MAX_RETRIES} fix retries — returning blocked.`)
-    return { status: 'blocked', planFile, tasks: plan.tasks, review: review.report, test: test.report, attempts: attempt + 1 }
+    log(`Still not green after ${MAX_RETRIES} fix retries — returning blocked.`);
+    return {
+      status: "blocked",
+      planFile,
+      tasks: plan.tasks,
+      review: review.report,
+      test: test.report,
+      attempts: attempt + 1,
+    };
   }
 
-  attempt += 1
-  phase('Fix')
-  log(`Review green: ${review.green}, test green: ${test.green} — fix pass ${attempt}/${MAX_RETRIES}.`)
+  attempt += 1;
+  phase("Fix");
+  log(
+    `Review green: ${review.green}, test green: ${test.green} — fix pass ${attempt}/${MAX_RETRIES}.`,
+  );
   await runAgent(
-    `${role('implementer')}
+    `${role("implementer")}
 
 Fix pass ${attempt} for migration phase "${phaseTitle || phaseSlug}". Do NOT pick a task from the plan file this time — instead, address every blocking and needs-changes finding below, in ${TARGET} only. Read the actual findings carefully and fix root causes, keeping all repo conventions (MIGRATION_PLAN.md) intact.
 
@@ -161,6 +204,6 @@ ${review.report}
 
 TESTER REPORT:
 ${test.report}`,
-    { model: 'sonnet', phase: 'Fix', label: `fix#${attempt}` } // TEMP: sonnet while opus is overloaded — revert to opus when it recovers
-  )
+    { model: "opus", fallbackModel: "sonnet", phase: "Fix", label: `fix#${attempt}` },
+  );
 }

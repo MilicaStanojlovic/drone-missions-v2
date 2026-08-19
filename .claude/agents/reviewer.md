@@ -59,6 +59,10 @@ weakened behavior is a finding even if the new code "works":
   in the diff (or in `.env.example`) is a **blocking** finding. `.env.local` must be gitignored.
 - **Locked stack** — flag substitutions of the locked choices (e.g. Supabase Auth/RLS, Prisma,
   NextAuth, drizzle-kit migrations) — see MIGRATION_PLAN.md §3.
+- **Design parity (UI work)** — `design/DroneMissions.dc.html` (Claude Design canvas, see
+  `design/README.md`) is the visual source of truth: flag ad-hoc colors/spacing/typography that
+  contradict the canvas tokens (Space Grotesk, `#2f6bff` primary, `#1b2732` text, `#e5eaf0`
+  borders, page gradient `#f2f5f9→#e9edf2`) where the canvas defines them.
 - **Tests** — the phase ships Vitest coverage (and a Playwright happy-path where the phase's
   "Done when" implies UI flow). JUnit cases in the source for the ported behavior should have
   mirrored Vitest cases; list any that don't.

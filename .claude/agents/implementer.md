@@ -27,6 +27,14 @@ service, DAO, entity, validator, Angular component/service). `MIGRATION_PLAN.md`
 source repos are the ground truth. If they disagree, the source wins — implement what the source
 does and note the discrepancy in your final report.
 
+## UI design ground truth
+
+For any UI work, `design/DroneMissions.dc.html` (pulled from the Claude Design canvas the
+original frontend was built against — see `design/README.md`) is the DESIGN source of truth:
+take design tokens, colors, spacing, and typography from that canvas (Space Grotesk, `#2f6bff`
+primary, `#1b2732` text, `#e5eaf0` borders, etc.), while the Angular components' HTML/CSS remain
+the BEHAVIOR reference. Never invent ad-hoc colors/spacing when the canvas defines them.
+
 ## Target conventions (from MIGRATION_PLAN.md — read it if unsure)
 
 - Hybrid structure: `src/app/` is ROUTING ONLY (thin handlers: parse → validate → service →

@@ -1,0 +1,105 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { closeDb, getDb } from "@/db/client";
+import { auditLog, users } from "@/db/schema";
+import { record, userLoggedIn, userRegistered, type AuditActorUser } from "./audit";
+
+/**
+ * Vitest suite for `audit.ts`.
+ *
+ * Live-DB only: writes a real row against the local Postgres started by
+ * `docker compose up db` (see `MIGRATION_PLAN.md` §8), the way the plan
+ * task calls for. Skipped — with a visible reason, mirroring
+ * `GET /api/health`'s `not_configured` branch — whenever `DATABASE_URL`
+ * isn't wired up (e.g. CI before a `DATABASE_URL` secret exists; see
+ * `.github/workflows/ci.yml`). `vitest.config.ts` forwards `DATABASE_URL`
+ * from `.env.local`/`.env` when present.
+ *
+ * SOURCE: drone-missions-backend/.../business/service/audit/AuditService.java,
+ * .../business/service/audit/NewAuditEntry.java.
+ */
+const hasDb = Boolean(process.env.DATABASE_URL);
+
+describe.runIf(hasDb)("audit.ts (live DB)", () => {
+  // A fresh user per test run (unique email) so reruns against the same
+  // database never collide with the `users_email_unique` constraint.
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let actor: AuditActorUser;
+  const insertedAuditLogIds: number[] = [];
+
+  beforeAll(async () => {
+    const [inserted] = await getDb()
+      .insert(users)
+      .values({
+        username: `audit-test-${runId}`,
+        email: `audit-test-${runId}@example.com`,
+        passwordHash: "not-a-real-hash",
+        role: "DESIGNER",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    actor = { id: inserted.id, role: inserted.role, username: inserted.username };
+  });
+
+  afterAll(async () => {
+    if (insertedAuditLogIds.length > 0) {
+      for (const id of insertedAuditLogIds) {
+        await getDb().delete(auditLog).where(eq(auditLog.id, id));
+      }
+    }
+    if (actor) {
+      await getDb().delete(users).where(eq(users.id, actor.id));
+    }
+    await closeDb();
+  });
+
+  describe("userRegistered", () => {
+    it("writes a USER_REGISTERED row with the user as both actor and target", async () => {
+      const row = await record(userRegistered(actor));
+      insertedAuditLogIds.push(row.id);
+
+      expect(row.id).toBeGreaterThan(0);
+      expect(row.actorId).toBe(actor.id);
+      expect(row.actorRole).toBe("DESIGNER");
+      expect(row.action).toBe("USER_REGISTERED");
+      expect(row.targetType).toBe("USER");
+      expect(row.targetId).toBe(actor.id);
+      expect(row.details).toBe(`"${actor.username}"`);
+      expect(row.createdAt).toBeInstanceOf(Date);
+    });
+
+    it("persists the row so it round-trips back out of the table", async () => {
+      const row = await record(userRegistered(actor));
+      insertedAuditLogIds.push(row.id);
+
+      const [fromDb] = await getDb().select().from(auditLog).where(eq(auditLog.id, row.id));
+      expect(fromDb).toMatchObject({
+        actorId: actor.id,
+        action: "USER_REGISTERED",
+        targetType: "USER",
+        targetId: actor.id,
+      });
+    });
+  });
+
+  describe("userLoggedIn", () => {
+    it("writes a USER_LOGGED_IN row with the user as both actor and target", async () => {
+      const row = await record(userLoggedIn(actor));
+      insertedAuditLogIds.push(row.id);
+
+      expect(row.actorId).toBe(actor.id);
+      expect(row.actorRole).toBe(actor.role);
+      expect(row.action).toBe("USER_LOGGED_IN");
+      expect(row.targetType).toBe("USER");
+      expect(row.targetId).toBe(actor.id);
+      expect(row.details).toBe(`"${actor.username}"`);
+    });
+  });
+});
+
+describe.skipIf(hasDb)("audit.ts (live DB)", () => {
+  it("skipped — no DATABASE_URL configured", () => {
+    expect(hasDb).toBe(false);
+  });
+});
