@@ -34,7 +34,10 @@ import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mi
  * snapshot back over columns (`status`, `awardedPilotId`) an edit deliberately
  * never touches.
  *
- * `countByStatus` (Phase 9) is not ported here.
+ * `countByStatus` at the bottom is the one read here that returns a summary
+ * rather than rows: it is where `JpaMissionDao`'s `Collectors.toMap` over the
+ * repository's `StatusCount` projection lands, because this module is both
+ * halves of that pair.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/access/JpaMissionDao.java
@@ -42,7 +45,8 @@ import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mi
  * - drone-missions-backend/.../data/access/OpenMissionQuery.java
  * - drone-missions-backend/.../data/repository/MissionRepository.java
  *   (`findByDesigner_Id`, `findByAwardedPilot_Id`, `searchAll`,
- *   `findByAwardedPilot_IdIsNotNullAndStatusInAndEndTimeBefore`)
+ *   `findByAwardedPilot_IdIsNotNullAndStatusInAndEndTimeBefore`, `countByStatus`
+ *   + its `StatusCount` projection)
  * - drone-missions-backend/.../data/model/Mission.java
  */
 
@@ -315,6 +319,50 @@ export async function searchAll(
       .where(where),
   ]);
   return { content: rows.map(toMission), request, totalElements: total?.value ?? 0 };
+}
+
+/**
+ * How many missions sit in each status — the admin overview's status bars.
+ * Ports the pair `MissionRepository.countByStatus()`
+ *
+ * ```
+ * select m.status as status, count(m) as total from Mission m group by m.status
+ * ```
+ *
+ * and `JpaMissionDao.countByStatus()`, which collects those `StatusCount` rows
+ * into a `Map<MissionStatus, Long>`. Both halves live here because this module
+ * is both halves; the map is built in TypeScript for the same reason the source
+ * builds it in Java rather than in JPQL — SQL has no map type, and the caller
+ * wants lookups, not a list.
+ *
+ * **Sparse**, exactly like the source's map: a status no mission currently
+ * holds produces no group, so it is *absent* rather than present as a zero.
+ * Zero-filling over every `MissionStatus` is the stats service's job (source:
+ * `PlatformStatsService` seeds the map with all statuses before folding these
+ * counts in), which is why the return type is a `Partial` record and not a
+ * total one — a total type would promise a key for every status and quietly
+ * hand out `undefined` where a caller read a number.
+ *
+ * No moderation filter and no designer join: the counts must agree with the
+ * admin listing, which shows every mission there is — HIDDEN ones and missions
+ * whose designer is suspended or absent included. (Admin removal is a real
+ * delete, not a state, so nothing lingers here after one.)
+ *
+ * `count()` is the total per group, so `total` is never zero and the rows never
+ * need filtering. No `ORDER BY`, like the source: the result is a map, so row
+ * order is unobservable.
+ */
+export async function countByStatus(): Promise<Partial<Record<MissionStatus, number>>> {
+  const rows = await getDb()
+    .select({ status: mission.status, total: count() })
+    .from(mission)
+    .groupBy(mission.status);
+
+  const counts: Partial<Record<MissionStatus, number>> = {};
+  for (const row of rows) {
+    counts[row.status] = row.total;
+  }
+  return counts;
 }
 
 /**

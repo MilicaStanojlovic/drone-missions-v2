@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
-import { mission, rating, users } from "@/db/schema";
+import { MISSION_STATUSES, mission, rating, users } from "@/db/schema";
 import * as queries from "./mission.queries";
 import type { OpenMissionQuery } from "./mission.queries";
 import type { MissionStatus, MissionWrite } from "./mission.types";
@@ -704,6 +704,102 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
       expect(ids).not.toContain(overdueAwardedId);
       expect(ids).not.toContain(overdueInProgressId);
       expect(ids).not.toContain(overdueHiddenId);
+    });
+  });
+
+  /**
+   * The admin overview's status bars.
+   *
+   * `countByStatus` takes no filter — it is a *platform* figure by definition —
+   * so the run-unique tag that scopes every other case in this file cannot
+   * scope this one: it summarises every mission row in the database, including
+   * ones a concurrently running live suite is holding and about to delete. So
+   * the aggregate is read sandwiched between two raw snapshots of `mission` and
+   * compared to an oracle computed in JS from those rows — deliberately not by
+   * a second SQL aggregate, which could pass by reproducing the very bug under
+   * test. When the snapshots agree, nothing else wrote while the query ran and
+   * the comparison is asserted as exact equality; when they disagree the case
+   * falls back to a floor over this suite's own rows, which holds whatever the
+   * rest of the database did. Locally and in CI the exact branch is the one
+   * that runs. (`user.queries.test.ts`'s platform-aggregate block solves the
+   * same problem the same way.)
+   *
+   * The exact branch is what pins "no moderation filter, no designer join":
+   * this suite's fixtures include a HIDDEN mission, a mission whose designer is
+   * suspended and a legacy ownerless one, so a query that had inherited any of
+   * `findOpen`'s predicates would land on a smaller number.
+   *
+   * SOURCE (the behaviour under test, not a test to mirror):
+   * - drone-missions-backend/.../data/repository/MissionRepository.java (`countByStatus` + `StatusCount`)
+   * - drone-missions-backend/.../data/access/JpaMissionDao.java (rows → map)
+   */
+  describe("countByStatus", () => {
+    /** One mission as the aggregate sees it — its status, nothing else. */
+    type Row = { id: number; status: MissionStatus };
+
+    async function snapshot(): Promise<Row[]> {
+      return getDb().select({ id: mission.id, status: mission.status }).from(mission);
+    }
+
+    /** Order-independent identity of a snapshot: did the table stand still? */
+    function signature(rows: Row[]): string {
+      return rows
+        .map((row) => `${row.id}:${row.status}`)
+        .sort()
+        .join("|");
+    }
+
+    /** This suite's own rows out of a snapshot — never written by anyone else. */
+    function ourRows(rows: Row[]): Row[] {
+      const ours = new Set(insertedMissionIds);
+      return rows.filter((row) => ours.has(row.id));
+    }
+
+    it("groups every mission by status, hidden and ownerless rows included", async () => {
+      const before = await snapshot();
+      const counts = await queries.countByStatus();
+      const after = await snapshot();
+      const quiet = signature(before) === signature(after);
+      const mine = ourRows(before);
+
+      // Only real statuses, and every value a live count.
+      const entries = Object.entries(counts) as Array<[MissionStatus, number]>;
+      expect(entries.every(([status]) => MISSION_STATUSES.includes(status))).toBe(true);
+      expect(entries.every(([, total]) => typeof total === "number")).toBe(true);
+
+      // The fixture is what gives the case its teeth under exact comparison:
+      // rows the open feed deliberately never returns are in the table, so a
+      // moderation filter or an inner designer join would show up as a miss.
+      expect(mine.map((row) => row.id)).toEqual(
+        expect.arrayContaining([hiddenId, suspendedOwnedId, legacyOwnerlessId, draftId]),
+      );
+
+      if (quiet) {
+        for (const status of MISSION_STATUSES) {
+          const oracle = before.filter((row) => row.status === status).length;
+          expect(counts[status] ?? 0).toBe(oracle);
+        }
+        expect(entries.reduce((sum, [, total]) => sum + total, 0)).toBe(before.length);
+      } else {
+        for (const status of MISSION_STATUSES) {
+          expect(counts[status] ?? 0).toBeGreaterThanOrEqual(
+            mine.filter((row) => row.status === status).length,
+          );
+        }
+      }
+    });
+
+    it("is sparse — a status is a key only when missions hold it", async () => {
+      const counts = await queries.countByStatus();
+
+      // The observable half of sparseness on a shared table: no key is ever a
+      // zero. A status nothing holds produces no group at all and is simply
+      // absent from the map, which is why zero-filling over `MISSION_STATUSES`
+      // is the stats service's job (source: `PlatformStatsService` seeds the
+      // map before folding these counts in) and not this query's.
+      const entries = Object.entries(counts) as Array<[MissionStatus, number]>;
+      expect(entries.length).toBeGreaterThan(0);
+      expect(entries.every(([, total]) => total > 0)).toBe(true);
     });
   });
 

@@ -13,13 +13,12 @@ import type { User } from "@/features/users/user.types";
  * no framework, is the testability argument for having the interface, exactly
  * as the Java test mocks `MissionDao` rather than a repository.
  *
- * Three Java cases have no counterpart here:
- * - `statusCountsAreNotCached` and `adminSearchIsNotCached` cover methods this
- *   port has no queries for yet. They are uncached pass-throughs in the source,
- *   and the phases that add them add these cases with them.
- *   (`overdueSweepIsNotCached` was in that group until Phase 8; it is ported at
- *   the bottom of this file, widened to also pin what "not cached" has to mean
- *   here — see that block's comment.)
+ * Every Java case now has a counterpart except one group:
+ * - the three uncached pass-throughs (`overdueSweepIsNotCached`,
+ *   `adminSearchIsNotCached`, `statusCountsAreNotCached`) waited on the phases
+ *   that added their queries — 8, 7 and 9 — and are ported at the bottom of
+ *   this file, each widened to also pin what "not cached" has to mean here
+ *   (see those blocks' comments).
  * - the three transaction-synchronisation cases
  *   (`entryRepopulatedDuringATransactionIsClearedOnCompletion`,
  *   `evictionAlsoHappensAfterARollback`, and the "no transaction" variant of
@@ -104,6 +103,7 @@ function fakeDelegate() {
       request,
       totalElements: 0,
     })),
+    countByStatus: vi.fn<MissionDao["countByStatus"]>(async () => ({})),
     invalidateLists: vi.fn<MissionDao["invalidateLists"]>(),
     invalidate: vi.fn<MissionDao["invalidate"]>(),
     save: vi.fn<MissionDao["save"]>(),
@@ -531,6 +531,61 @@ describe("CachingMissionDao — searchAll is not cached", () => {
     delegate.searchAll.mockResolvedValue({ content: [mission(1)], request, totalElements: 1 });
 
     await cache.searchAll(null, request);
+
+    expect(cache.entityStats().size).toBe(0);
+    expect(cache.listStats().size).toBe(0);
+  });
+});
+
+/**
+ * `statusCountsAreNotCached`, the last of the source's three uncached
+ * pass-throughs ("a rare admin-only stats view is not worth widening the
+ * invalidation surface"). Both source decorators carry the identical case.
+ *
+ * The Java test asserts only "the delegate is called twice", which is the
+ * whole of what a Mockito `verify(delegate, times(2))` can say; the extra
+ * cases here pin the rest of what "not cached" means for this implementation:
+ * the counts a caller gets are the delegate's own answer each time (so a
+ * mission written between two dashboard loads is reflected in the second),
+ * and nothing lands in either cache for a later write to have to clear.
+ */
+describe("CachingMissionDao — status counts are not cached", () => {
+  it("hits the delegate on every call", async () => {
+    delegate.countByStatus.mockResolvedValue({ PUBLISHED: 2 });
+
+    await cache.countByStatus();
+    await cache.countByStatus();
+
+    expect(delegate.countByStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the delegate's counts unchanged, sparseness included", async () => {
+    const counts = { PUBLISHED: 2, COMPLETED: 5 };
+    delegate.countByStatus.mockResolvedValue(counts);
+
+    const found = await cache.countByStatus();
+
+    // The very object the delegate returned: no copy layer and no zero-filling
+    // stand between the query and the caller — filling the absent statuses in
+    // is the stats service's job, exactly as in `PlatformStatsService`.
+    expect(found).toBe(counts);
+    expect(found.DRAFT).toBeUndefined();
+  });
+
+  it("sees a later write, because nothing was remembered from the earlier read", async () => {
+    delegate.countByStatus.mockResolvedValue({ PUBLISHED: 2 });
+    await cache.countByStatus();
+    delegate.save.mockResolvedValue(mission(1));
+    await cache.save(mission(1));
+    delegate.countByStatus.mockResolvedValue({ PUBLISHED: 3 });
+
+    expect(await cache.countByStatus()).toEqual({ PUBLISHED: 3 });
+  });
+
+  it("leaves both caches empty", async () => {
+    delegate.countByStatus.mockResolvedValue({ PUBLISHED: 2 });
+
+    await cache.countByStatus();
 
     expect(cache.entityStats().size).toBe(0);
     expect(cache.listStats().size).toBe(0);

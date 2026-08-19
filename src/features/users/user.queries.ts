@@ -1,5 +1,5 @@
 import "server-only";
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { users, type UserRole } from "@/db/schema";
 import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
@@ -14,11 +14,12 @@ import type { NewUser, User } from "./user.types";
  * service, since Phase 1 had no `user.service.ts` yet).
  *
  * The aggregate queries (`countByRoleAndSuspendedFalse`, `countBySuspendedTrue`,
- * `countByRole`) feed the admin statistics endpoint and are not ported here —
- * Phase 9.
+ * `countByRole`) feed the admin statistics endpoint and live at the bottom of
+ * this module: they return counts rather than `User` rows, exactly as the
+ * source's `long` counts and `RoleCount` projection do.
  *
  * SOURCE:
- * - drone-missions-backend/.../data/repository/UserRepository.java (`findByEmail`, `existsByEmail`, `search`)
+ * - drone-missions-backend/.../data/repository/UserRepository.java (`findByEmail`, `existsByEmail`, `search`, the three counts + `RoleCount`)
  * - drone-missions-backend/.../business/service/user/UserService.java (`findById`, the `repository.save` in `suspend`/`reactivate`)
  */
 
@@ -163,4 +164,78 @@ export async function insertUser(newUser: NewUser): Promise<User> {
     })
     .returning();
   return user;
+}
+
+/**
+ * One row of `countByRole` — mirrors the source's `RoleCount` Spring Data
+ * projection, whose whole purpose is to keep the aggregate typed instead of an
+ * `Object[]` row. `total` is a `number` rather than the projection's `Long`:
+ * an account count cannot approach 2^53, and the platform-stats response
+ * writes it as a JSON number either way.
+ */
+export interface RoleCount {
+  role: UserRole;
+  total: number;
+}
+
+/**
+ * How many accounts of one role are *not* suspended — the overview's "active
+ * pilots" tile, called with `PILOT`. Mirrors the derived query
+ * `UserRepository.countByRoleAndSuspendedFalse(UserRole)`, whose method name
+ * Spring Data expands to `where role = :role and suspended = false`.
+ *
+ * Both halves matter: a suspended pilot is excluded even though the role
+ * matches, and a suspended account of another role is excluded by the role
+ * predicate rather than being quietly counted here — which is what makes this
+ * count and `countBySuspendedTrue` below independent readings rather than two
+ * halves of one split.
+ */
+export async function countByRoleAndSuspendedFalse(role: UserRole): Promise<number> {
+  const [row] = await getDb()
+    .select({ value: count() })
+    .from(users)
+    .where(and(eq(users.role, role), eq(users.suspended, false)));
+  return row?.value ?? 0;
+}
+
+/**
+ * Suspended accounts across every role — the source's javadoc in as many
+ * words, and the reason no role predicate appears here. Mirrors the derived
+ * query `UserRepository.countBySuspendedTrue()`.
+ *
+ * `suspended` is `NOT NULL DEFAULT false` (V16, which replaced V13's nullable
+ * `suspended_at` timestamp), so `= true` needs no null handling: every row
+ * falls on exactly one side of it.
+ */
+export async function countBySuspendedTrue(): Promise<number> {
+  const [row] = await getDb()
+    .select({ value: count() })
+    .from(users)
+    .where(eq(users.suspended, true));
+  return row?.value ?? 0;
+}
+
+/**
+ * The account count per role. Mirrors `UserRepository.countByRole()`:
+ *
+ * ```
+ * select u.role as role, count(u) as total from User u group by u.role
+ * ```
+ *
+ * Sparse by construction — a role nobody holds produces no group and is simply
+ * absent from the list, never present as a zero. Zero-filling over every
+ * `UserRole` is the stats service's job, exactly as it is in the source
+ * (`PlatformStatsService` seeds the map with all roles before folding these
+ * rows in), so this stays the faithful shape of the SQL rather than a map the
+ * DAO has already padded.
+ *
+ * Suspension is not filtered: this counts *accounts*, so a suspended user
+ * still belongs to their role's bar. The suspended total is the separate
+ * reading `countBySuspendedTrue` gives.
+ *
+ * No `ORDER BY`, like the source: the only consumer folds the rows into a map
+ * keyed by role, so their order is unobservable.
+ */
+export async function countByRole(): Promise<RoleCount[]> {
+  return getDb().select({ role: users.role, total: count() }).from(users).groupBy(users.role);
 }

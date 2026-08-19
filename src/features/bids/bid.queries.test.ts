@@ -145,6 +145,20 @@ describe.runIf(hasDb)("bid.queries.ts (live DB)", () => {
     return row.id;
   }
 
+  /**
+   * The platform's bid totals as they stood *before* this file inserted
+   * anything — captured by a hook registered ahead of the fixture hook below,
+   * which is what makes it a reading of a database this suite has not touched
+   * yet. On the clean local/CI database (`docker compose up db` + Flyway, no
+   * migration seeds a bid) that reading is the `volume()` empty case; see the
+   * case that consumes it.
+   */
+  let baselineVolume: Awaited<ReturnType<typeof queries.volume>>;
+
+  beforeAll(async () => {
+    baselineVolume = await queries.volume();
+  });
+
   beforeAll(async () => {
     designerId = await insertUser("designer", "DESIGNER");
     pilotId = await insertUser("pilot", "PILOT");
@@ -493,6 +507,185 @@ describe.runIf(hasDb)("bid.queries.ts (live DB)", () => {
 
       expect(second.id).not.toBe(first.id);
       expect(second.amount).toBe(450);
+    });
+  });
+
+  describe("volume", () => {
+    /**
+     * `volume()` takes no filter — it is the platform's total by definition —
+     * so these cases cannot be scoped to this run's rows the way every case
+     * above is. They use the relative form `user.queries.test.ts` documents
+     * for exactly this situation instead: a concurrently running live suite
+     * can only *add* bids to the platform, never remove the rows this run
+     * owns, so "at least what this run inserted" stays true whatever else the
+     * database holds, while an exact equality would be a race.
+     */
+    async function ourBids(): Promise<{ count: number; total: number }> {
+      // The oracle is deliberately computed in JS from the raw rows rather
+      // than by a second `sum()`, so it cannot pass by reproducing the same
+      // aggregate the function under test uses.
+      const rows = await getDb()
+        .select({ amount: bid.amount })
+        .from(bid)
+        .where(inArray(bid.missionId, insertedMissionIds));
+      return {
+        count: rows.length,
+        total: rows.reduce((sum, row) => sum + Number(row.amount), 0),
+      };
+    }
+
+    it("counts every live bid and adds the amounts up as a number, not decimal text", async () => {
+      const platform = await queries.volume();
+      const ours = await ourBids();
+
+      expect(platform.count).toBeGreaterThanOrEqual(ours.count);
+      expect(typeof platform.count).toBe("number");
+      // `sum(numeric)` comes back from postgres.js as decimal text; the DAO
+      // narrows it exactly once, so a consumer never sees "12345.50". The
+      // cent of slack absorbs the float error of the JS-side oracle only —
+      // `platform.totalAmount` itself is the database's exact sum.
+      expect(platform.totalAmount).toBeGreaterThan(ours.total - 0.01);
+      expect(typeof platform.totalAmount).toBe("number");
+      expect(Number.isNaN(platform.totalAmount)).toBe(false);
+    });
+
+    it("keeps the column's two-decimal scale in the total", async () => {
+      const scaler = await insertUser("volume-scale", "PILOT");
+      const saved = await queries.save({
+        missionId: towerId,
+        pilotId: scaler,
+        amount: 10.555,
+        message: null,
+        status: "PENDING",
+      });
+      insertedBidIds.push(saved.id);
+
+      const platform = await queries.volume();
+      const ours = await ourBids();
+
+      // Postgres rounded the new amount to the column's scale on the way in
+      // (`numeric(12, 2)`), so it contributes 10.56 to the sum, not 10.555…
+      expect(saved.amount).toBe(10.56);
+      expect(platform.totalAmount).toBeGreaterThan(ours.total - 0.01);
+      // …and every summand being exact to the cent makes the total exact to
+      // the cent too, which a value that had been parsed as anything other
+      // than the decimal text would not survive.
+      expect(Math.round(platform.totalAmount * 100) / 100).toBe(platform.totalAmount);
+    });
+
+    it("answers zero rather than SQL NULL when there are no bids at all", async () => {
+      // An aggregate with no `GROUP BY` returns its one row even over an empty
+      // table, where `sum` is NULL — the `coalesce` is what turns that into 0.
+      // Only a database with no bids can show it, which is the state
+      // `baselineVolume` was read in (before this file inserted its fixture)
+      // and which a clean local/CI database really is. On a developer database
+      // that already carries bids the same guarantee is checked in the shape
+      // that remains observable: still a number, never NULL or NaN.
+      if (baselineVolume.count === 0) {
+        expect(baselineVolume).toEqual({ count: 0, totalAmount: 0 });
+      } else {
+        expect(typeof baselineVolume.totalAmount).toBe("number");
+        expect(Number.isNaN(baselineVolume.totalAmount)).toBe(false);
+      }
+    });
+  });
+
+  describe("topMissionsByBids", () => {
+    /**
+     * Its own fixture, tagged with a marker in every mission name: the query
+     * is platform-wide, so the exact assertions filter the full list down to
+     * the missions this block created, and the cap case asserts only what
+     * holds whatever else the database contains.
+     */
+    const marker = `top-${runId}`;
+
+    /** Three bids — the busiest mission this run creates. */
+    let topA: number;
+    /** Two bids. */
+    let topB: number;
+    /** Two bids as well, and moderated away — it must still be listed. */
+    let topHidden: number;
+    /** One bid. */
+    let topC: number;
+
+    function oursOnly(rows: Awaited<ReturnType<typeof queries.topMissionsByBids>>) {
+      return rows.filter((row) => row.name?.includes(marker));
+    }
+
+    beforeAll(async () => {
+      const first = await insertUser("top-first", "PILOT");
+      const second = await insertUser("top-second", "PILOT");
+      const third = await insertUser("top-third", "PILOT");
+
+      topA = await insertMission({ name: `Top A ${marker}` });
+      topB = await insertMission({ name: `Top B ${marker}` });
+      topC = await insertMission({ name: `Top C ${marker}` });
+      // Bid on by nobody — it must never appear.
+      await insertMission({ name: `Top D ${marker}` });
+      topHidden = await insertMission({ name: `Top hidden ${marker}`, moderation: "HIDDEN" });
+
+      const at = new Date("2026-02-01T09:00:00Z");
+      const fixture: ReadonlyArray<readonly [number, readonly number[]]> = [
+        [topA, [first, second, third]],
+        [topB, [first, second]],
+        [topHidden, [first, second]],
+        [topC, [first]],
+      ];
+      for (const [missionId, pilots] of fixture) {
+        for (const pilot of pilots) {
+          // One bid per pilot per mission — more would hit
+          // `bid_mission_pilot_unique`, which is what makes each mission's
+          // count here equal to its number of distinct bidders.
+          await insertBid({ missionId, pilotId: pilot, amount: "100.00", createdAt: at });
+        }
+      }
+    });
+
+    it("ranks missions by their live bid count, busiest first", async () => {
+      // A limit far above the number of missions any suite creates, so this
+      // is the whole ranking and the filter below is a subsequence of it —
+      // order preserved.
+      const ranked = oursOnly(await queries.topMissionsByBids(1_000));
+
+      expect(ranked).toEqual([
+        { name: `Top A ${marker}`, total: 3 },
+        // `Top hidden` and `Top B` are tied at two bids. The source leaves
+        // ties unordered; this port breaks them by `mission.id DESC`, and the
+        // hidden mission was inserted last, so it sorts first.
+        { name: `Top hidden ${marker}`, total: 2 },
+        { name: `Top B ${marker}`, total: 2 },
+        { name: `Top C ${marker}`, total: 1 },
+      ]);
+      expect(typeof ranked[0].total).toBe("number");
+    });
+
+    it("leaves out a mission nobody has bid on", async () => {
+      const ranked = oursOnly(await queries.topMissionsByBids(1_000));
+
+      // Zero-bid missions are absent rather than present as zero: the count
+      // is over `bid` rows, and the source's javadoc says so in as many words.
+      expect(ranked.map((row) => row.name)).not.toContain(`Top D ${marker}`);
+    });
+
+    it("keeps a hidden mission in the chart — the source applies no moderation filter", async () => {
+      const ranked = oursOnly(await queries.topMissionsByBids(1_000));
+
+      // The overview is admin-only and its status counts include moderated
+      // missions, so the chart beside them counts the same population.
+      expect(ranked.map((row) => row.name)).toContain(`Top hidden ${marker}`);
+    });
+
+    it("returns no more rows than the limit, and the busiest ones", async () => {
+      const capped = await queries.topMissionsByBids(2);
+
+      // At least three missions carry bids (this block just made them), so a
+      // limit of two is really cutting the list off rather than exhausting it.
+      expect(capped).toHaveLength(2);
+      expect(capped[0].total).toBeGreaterThanOrEqual(capped[1].total);
+      // Whatever else the database holds, the busiest mission on the platform
+      // has at least as many bids as `Top A`'s three — which is exactly what
+      // "capped at the top of a descending order" has to mean.
+      expect(capped[0].total).toBeGreaterThanOrEqual(3);
     });
   });
 });

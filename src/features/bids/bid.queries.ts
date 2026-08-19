@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { bid, mission, users, type BidStatus } from "@/db/schema";
 import type { Bid } from "./bid.types";
@@ -15,7 +15,9 @@ import type { Bid } from "./bid.types";
  * mission/user lookups, which is exactly the shape the source removed.
  *
  * The two aggregate projections `volume()` / `topMissionsByBids()` (the admin
- * overview, Phase 9) are deliberately not ported here.
+ * overview) are the exception: they join nothing they do not need and return
+ * their own narrow shapes rather than `Bid`s, exactly as the source's
+ * `BidVolume` / `MissionBidCount` projections do.
  *
  * ## Running inside a transaction
  * `findById`, `findByMissionAndStatus` and `save` take an optional `tx`
@@ -199,6 +201,91 @@ export async function findByPilotOrderByCreatedAtDesc(pilotId: number): Promise<
     .where(eq(bid.pilotId, pilotId))
     .orderBy(desc(bid.createdAt), desc(bid.id));
   return rows.map(toBid);
+}
+
+/**
+ * Platform-wide bid totals — the return of the source's `BidVolume`
+ * projection, which keeps the aggregate typed instead of an `Object[]` row.
+ *
+ * `totalAmount` is a `number` here for the same reason `Bid.amount` is: the
+ * column is `numeric(12, 2)`, whose sum is exactly representable in a double
+ * long before the platform's bids could add up to 2^53 cents, and the source's
+ * `BigDecimal` is written by Jackson as a JSON number anyway. The narrowing
+ * happens once, in `volume()`, exactly as `toBid` does it for a single bid.
+ */
+export interface BidVolume {
+  count: number;
+  totalAmount: number;
+}
+
+/** One bar of the overview's bids-per-mission chart. Mirrors `MissionBidCount`. */
+export interface MissionBidCount {
+  /**
+   * Nullable because `mission.name` is (`varchar(255)`, no NOT NULL in V1) —
+   * the same nullability `Mission.name` and `bid.types.ts` already carry.
+   */
+  name: string | null;
+  total: number;
+}
+
+/**
+ * How many live bids exist and what they add up to. Mirrors
+ * `BidRepository.volume()`:
+ *
+ * ```
+ * select count(b) as count, coalesce(sum(b.amount), 0) as totalAmount from Bid b
+ * ```
+ *
+ * Any status counts, and a withdrawn bid is a deleted row (see `deleteBid`
+ * below), so this is live bids only — the javadoc's own words.
+ *
+ * The `coalesce` is what makes an empty table answer `0` rather than SQL NULL,
+ * and it is load-bearing: an aggregate with no `GROUP BY` always returns
+ * exactly one row, so without it the caller would get `null` instead of a
+ * total. `sum(numeric)` comes back from postgres.js as decimal *text* (the
+ * driver refuses to narrow an arbitrary-precision type), which is why the
+ * `Number()` sits here and no consumer ever sees the string.
+ */
+export async function volume(): Promise<BidVolume> {
+  const [row] = await getDb()
+    .select({
+      count: count(),
+      totalAmount: sql<string>`coalesce(sum(${bid.amount}), 0)`,
+    })
+    .from(bid);
+  return { count: row?.count ?? 0, totalAmount: Number(row?.totalAmount ?? 0) };
+}
+
+/**
+ * The most-bid-on missions, most bids first, capped at `limit`. Mirrors
+ * `BidRepository.topMissionsByBids(Pageable)`, where the cap arrives as a
+ * `PageRequest.of(0, TOP_MISSIONS)` — a plain `limit` here, since the source
+ * only ever asks for the first page and never reads a total.
+ *
+ * Zero-bid missions are naturally absent (the count is over `bid` rows), and
+ * there is no moderation filter: the overview is admin-only and its status
+ * counts include hidden missions too, so the chart matching them is the
+ * source's deliberate choice.
+ *
+ * The join is INNER, like `selectBids`, because `bid.mission_id` is `NOT NULL`
+ * with an FK (V8) — and `group by mission.id, mission.name` groups by the id,
+ * not the name, so two missions that happen to share a name stay two bars,
+ * exactly as the JPQL does it.
+ *
+ * `mission.id DESC` is added as a tiebreaker, the same way this module's
+ * `created_at` orderings are: the source leaves missions with equal counts in
+ * an unspecified order, which the cap makes observable (which of the tied
+ * missions gets the last bar). Breaking the tie by id keeps the answer stable
+ * across calls without reordering any two rows the source already ordered.
+ */
+export async function topMissionsByBids(limit: number): Promise<MissionBidCount[]> {
+  return getDb()
+    .select({ name: mission.name, total: count() })
+    .from(bid)
+    .innerJoin(mission, eq(bid.missionId, mission.id))
+    .groupBy(mission.id, mission.name)
+    .orderBy(desc(count()), desc(mission.id))
+    .limit(limit);
 }
 
 /**

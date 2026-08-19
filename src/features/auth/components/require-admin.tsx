@@ -27,10 +27,11 @@ import { getRole, isLoggedIn } from "@/features/auth/auth.client";
  * `requireRole(caller, "ADMIN")` calls in the *route handlers* —
  * `api/v1/users/route.ts`, `users/admins/route.ts`,
  * `users/[id]/{suspend,reactivate}/route.ts`, `missions/all/route.ts`,
- * `missions/[id]/{hide,unhide,remove}/route.ts` and `audit-log/route.ts` — not
- * in the services those handlers call: `user.service.ts`, `mission.service.ts`
- * and `audit.service.ts` each deliberately carry no role check, because the
- * source keeps the gate at the controller too.
+ * `missions/[id]/{hide,unhide,remove}/route.ts`, `audit-log/route.ts` and
+ * `platform-stats/route.ts` — not in the services those handlers call:
+ * `user.service.ts`, `mission.service.ts`, `audit.service.ts` and
+ * `stats.service.ts` each deliberately carry no role check, because the source
+ * keeps the gate at the controller too.
  *
  * SOURCE: drone-missions-frontend/.../guards/auth.guard.ts (`adminGuard`)
  */

@@ -278,11 +278,10 @@ test.describe("Phase 7 admin & moderation happy path (live DB)", () => {
 
   /**
    * Signs the admin in. ADMIN's `roleHomePath` is `/admin/overview`, whose one
-   * fetch (`GET /api/v1/platform-stats`) is Phase 9's and does not exist yet —
-   * the page therefore renders the source's own error branch, which is the
-   * documented Phase 7 state (see `admin-overview.tsx`). Nothing this suite
-   * asserts depends on it; the landing is only the proof that an ADMIN token
-   * gets past `RequireAdmin`.
+   * fetch (`GET /api/v1/platform-stats`) exists as of Phase 9, so the page now
+   * renders real aggregates. Nothing this suite asserts depends on them: the
+   * landing is only the proof that an ADMIN token gets past `RequireAdmin`.
+   * The dashboard itself is covered by `e2e/stats.spec.ts`.
    */
   function signInAsAdmin(page: Page): Promise<void> {
     return signIn(page, admin, /\/admin\/overview$/);
