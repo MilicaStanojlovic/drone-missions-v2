@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { serverMessage } from "@/lib/api/client";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Toast, useToast } from "@/components/toast";
 import { getRole, getUserId } from "@/features/auth/auth.client";
 import { fetchBidsForMission, type Bid } from "@/features/bids/bid.client";
 import { BidsPanel } from "@/features/bids/components/bids-panel";
@@ -14,8 +16,11 @@ import {
   MISSION_LIFECYCLE,
   MISSION_STATUS_COLORS,
   MISSION_STATUS_LABELS,
+  cancelMission,
+  completeMission,
   deleteMission,
   fetchMission,
+  startMission,
   type Mission,
 } from "../mission.client";
 import { distanceText, durationText } from "../mission.geo";
@@ -24,18 +29,31 @@ import type { MissionStatus } from "../mission.types";
 /**
  * One mission in full: status badge and lifecycle timeline, a read-only render
  * of the flight plan, telemetry, the brief, and the designer behind it — plus
- * Edit / Delete for the owning designer.
+ * Edit / Cancel / Delete for the owning designer and Start / Mark finished for
+ * the pilot who won it.
  *
  * Ports `MissionDetailComponent` — template, styles and behaviour. Phase 3
  * adds the bids aside (`BidsPanel`, which owns the pilot's form and the
  * designer's list), the bid telemetry tile, the `refresh()` that re-reads
  * mission + bids in place after a bid action, and the `from=my-bids` Back
- * target the phase-2 port left pending. Still deliberately NOT ported, because
- * the APIs behind them do not exist in this app until later phases (a stubbed
- * control that 404s is worse parity than an absent one):
- * - Start / Mark finished / Cancel mission (`MissionService.start/complete/cancel`,
- *   Phase 5), and with them the designer's Accept-bid flow (see `BidsPanel`);
- * - the ratings panel (`RatingService.forMission`, Phase 6).
+ * target the phase-2 port left pending. Phase 5 adds `isOwner` as a prop of
+ * that aside, which is what turns on the designer's Accept-bid flow inside it,
+ * plus the mission's own lifecycle controls: the winning pilot's Start / Mark
+ * finished block (`isWinner`, `canStart`) and the owning designer's Cancel
+ * (`canCancel`), each behind the source's confirm dialog and toast.
+ *
+ * Both sets of controls only hide what the server would refuse anyway — the
+ * service re-checks caller, ownership and status on every call — and every
+ * outcome, success *or* failure, ends in `refresh()`, because the usual reason
+ * a lifecycle call 409s is that the mission moved on since this page loaded,
+ * and re-reading is what replaces the now-wrong button with the truth behind
+ * the error message. Nothing here advances a mission on its own: a mission
+ * whose `startTime` has passed still reads AWARDED until its pilot presses
+ * Start (see `mission.service.ts`).
+ *
+ * Still NOT ported here: the ratings panel, whose `RatingService.forMission`
+ * is Phase 6 and does not exist yet (a stubbed control that 404s is worse
+ * parity than an absent one).
  * The read-only status timeline IS ported: it is derived purely from
  * `mission.status`, which this phase's API already returns, and it is what
  * makes the status badge legible.
@@ -44,10 +62,14 @@ import type { MissionStatus } from "../mission.types";
  * `auth.userId` / `auth.isDesigner` are read after mount because the JWT they
  * decode lives in `localStorage` (see `(app)/layout.tsx` for the same pattern).
  *
- * The source's `toast.show(...)` feedback arrived with the bids panel (which
- * owns `useToast`, since it raises all of it). Delete keeps the treatment the
- * phase-2 port gave it: a failure surfaces inline, and a success is announced
- * by the navigation itself, exactly as the source navigates away.
+ * The source's `toast.show(...)` feedback is raised by whichever component owns
+ * the action: the bids panel keeps its own `useToast` for the bid actions, and
+ * this one has its own for the three lifecycle actions (`useToast` is a hook,
+ * not the source's root-provided singleton, so each is independent — only one
+ * of them can ever have a toast up, because only one of them acted). Delete is
+ * the exception, keeping the treatment the phase-2 port gave it: a failure
+ * surfaces inline, and a success is announced by the navigation itself,
+ * exactly as the source navigates away.
  *
  * SOURCE: drone-missions-frontend/.../components/mission-detail/mission-detail.component.{ts,html,css}
  */
@@ -72,6 +94,19 @@ const BTN_DANGER = cn(BTN, "bg-[#e04a3f] font-semibold text-white hover:enabled:
 
 const CARD = "bg-card rounded-xl border border-[#e8edf2] shadow-[0_1px_2px_rgba(20,35,55,0.04)]";
 const META_LABEL = "font-mono text-[9.5px] tracking-[0.08em] text-[#a2afbc] uppercase";
+
+/**
+ * The winning pilot's lifecycle card at the top of the bids aside (`.finish`
+ * and friends). Its blue is the canvas primary `#2f6bff` on the `#eef7ff` /
+ * `#cfe6fb` wash the design system pairs with it, and the finished state
+ * switches to the completed-green trio, exactly as the source's CSS does.
+ */
+const FINISH = "mb-3.5 rounded-[10px] border border-[#cfe6fb] bg-[#eef7ff] px-[15px] py-3.5";
+const FINISH_DONE = "border-[#cbe9d8] bg-[#eef8f2]";
+const FINISH_TITLE = "text-sm font-bold text-[#16222e]";
+const FINISH_SUB = "mt-[5px] text-[12.5px] text-[#5c6b7a]";
+const FINISH_CTA =
+  "mt-3 w-full cursor-pointer rounded-lg bg-[#2f6bff] p-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-[#2357d6]";
 
 /** "Jul 18 – Jul 22" from the mission's flight window. Ports `windowText`. */
 function windowText(mission: Mission): string {
@@ -123,6 +158,11 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   const [bids, setBids] = useState<Bid[]>([]);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
+  /** The three lifecycle confirmations. Port `pendingStart` / `pendingComplete` / `pendingCancel`. */
+  const [pendingStart, setPendingStart] = useState(false);
+  const [pendingComplete, setPendingComplete] = useState(false);
+  const [pendingCancel, setPendingCancel] = useState(false);
+  const { toast, show } = useToast();
 
   /** Role and id come from the stored JWT, readable only after mount. */
   const [role, setRole] = useState<string | null>(null);
@@ -183,16 +223,40 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
   /** Ports `isOwner`. A legacy ownerless mission (`userId: null`) has no owner. */
   const isOwner =
     role === "DESIGNER" && mission !== null && userId !== null && mission.userId === userId;
+  /**
+   * The calling pilot won this mission. Ports `isWinner` — with the same
+   * `userId !== null` guard `isOwner` carries, so an unawarded mission
+   * (`awardedPilotId: null`) read before the token is decoded is nobody's win.
+   */
+  const isWinner =
+    isPilot && mission !== null && userId !== null && mission.awardedPilotId === userId;
+  /** The awarded pilot can start their mission while it's still AWARDED. Ports `canStart`. */
+  const canStart = isWinner && mission?.status === "AWARDED";
+  /** The owning designer can cancel any mission that isn't finished yet. Ports `canCancel`. */
+  const canCancel = isOwner && !["COMPLETED", "CANCELLED"].includes(mission?.status ?? "");
 
   /** Where the user came from, so "Back" returns there (e.g. 'my-bids'). Ports `from`. */
   const from = searchParams.get("from") ?? "";
 
-  /** Ports `backLabel` / `back()`. */
+  /**
+   * Ports `backLabel` / `back()`, plus one origin the source has no page for:
+   * `from=my-jobs` is Phase 5's pilot jobs list (`/my-jobs`), which links its
+   * cards the way `MyBidsList` links its rows. The source knows only
+   * `my-bids`, so a mirror-only port would send a pilot arriving from their
+   * jobs list "Back to feed" — a Back button that goes somewhere the user has
+   * not been. Everything else is unchanged.
+   */
   const backLabel =
-    from === "my-bids" ? "Back to my bids" : isPilot ? "Back to feed" : "My Missions";
+    from === "my-bids"
+      ? "Back to my bids"
+      : from === "my-jobs"
+        ? "Back to my jobs"
+        : isPilot
+          ? "Back to feed"
+          : "My Missions";
   function back(): void {
-    if (from === "my-bids") {
-      router.push("/my-bids");
+    if (from === "my-bids" || from === "my-jobs") {
+      router.push(`/${from}`);
       return;
     }
     if (isPilot) {
@@ -220,6 +284,64 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
     deleteMission(mission.id)
       .then(() => router.push("/missions/mine"))
       .catch(() => setDeleteError(true));
+  }
+
+  /**
+   * The three lifecycle confirmations. Each ports its `confirm*` handler
+   * unchanged: close the dialog first so a second confirmation cannot re-fire
+   * the call, then act, then `refresh()` — on the failure path too, since a
+   * rejected call almost always means the mission is no longer in the state
+   * the button assumed.
+   */
+  function confirmStart(): void {
+    setPendingStart(false);
+    if (!mission) {
+      return;
+    }
+    startMission(mission.id)
+      .then(() => {
+        show("Mission started", "#2f6bff");
+        refresh();
+      })
+      .catch((startError: unknown) => {
+        console.error("Failed to start mission", startError);
+        show(serverMessage(startError, "Could not start the mission"), "#e04a3f");
+        refresh();
+      });
+  }
+
+  function confirmComplete(): void {
+    setPendingComplete(false);
+    if (!mission) {
+      return;
+    }
+    completeMission(mission.id)
+      .then(() => {
+        show("Mission marked as completed", "#12a06a");
+        refresh();
+      })
+      .catch((completeError: unknown) => {
+        console.error("Failed to complete mission", completeError);
+        show(serverMessage(completeError, "Could not complete the mission"), "#e04a3f");
+        refresh();
+      });
+  }
+
+  function confirmCancel(): void {
+    setPendingCancel(false);
+    if (!mission) {
+      return;
+    }
+    cancelMission(mission.id)
+      .then(() => {
+        show("Mission cancelled", "#e04a3f");
+        refresh();
+      })
+      .catch((cancelError: unknown) => {
+        console.error("Failed to cancel mission", cancelError);
+        show(serverMessage(cancelError, "Could not cancel the mission"), "#e04a3f");
+        refresh();
+      });
   }
 
   if (loading) {
@@ -302,6 +424,11 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
               <Link href={`/missions/${mission.id}/edit`} className={BTN_SOFT_LINK}>
                 Edit
               </Link>
+              {canCancel && (
+                <button type="button" className={BTN_SOFT} onClick={() => setPendingCancel(true)}>
+                  Cancel mission
+                </button>
+              )}
               <button type="button" className={BTN_DANGER} onClick={() => setPendingDelete(true)}>
                 Delete
               </button>
@@ -404,7 +531,62 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
             a pilot the designer's "Bids" list for a frame before it swapped.
           */}
           {role !== null && (
-            <BidsPanel mission={mission} bids={bids} isPilot={isPilot} onChanged={refresh} />
+            <BidsPanel
+              mission={mission}
+              bids={bids}
+              isPilot={isPilot}
+              isOwner={isOwner}
+              onChanged={refresh}
+              /*
+                The winning pilot's lifecycle card. It sits at the top of the
+                pilot's panel body in the source, above their own bid, but it
+                is a *mission* control — its handlers, its confirmations and
+                its copy (`windowText`) all belong to this component — so it is
+                built here and handed to the panel as the slot it renders
+                there, rather than duplicating mission state one level down.
+                `isWinner` already implies the pilot branch, so the panel's
+                designer face never receives it.
+              */
+              finishBlock={
+                isWinner &&
+                (mission.status === "IN_PROGRESS" ? (
+                  <div className={FINISH}>
+                    <div className={FINISH_TITLE}>Your mission is underway</div>
+                    <div className={FINISH_SUB}>
+                      Started {windowText(mission)} — let the designer know once it&apos;s done.
+                    </div>
+                    <button
+                      type="button"
+                      className={FINISH_CTA}
+                      onClick={() => setPendingComplete(true)}
+                    >
+                      Mark mission finished
+                    </button>
+                  </div>
+                ) : mission.status === "COMPLETED" ? (
+                  <div className={cn(FINISH, FINISH_DONE)}>
+                    <div className={FINISH_TITLE}>✓ Mission completed</div>
+                    <div className={FINISH_SUB}>Thanks — you marked this mission as finished.</div>
+                  </div>
+                ) : (
+                  canStart && (
+                    <div className={FINISH}>
+                      <div className={FINISH_TITLE}>You won this mission</div>
+                      <div className={FINISH_SUB}>
+                        Start it when you&apos;re ready to fly — then you can mark it finished.
+                      </div>
+                      <button
+                        type="button"
+                        className={FINISH_CTA}
+                        onClick={() => setPendingStart(true)}
+                      >
+                        Start mission
+                      </button>
+                    </div>
+                  )
+                ))
+              }
+            />
           )}
         </div>
       </main>
@@ -419,6 +601,39 @@ export function MissionDetail({ missionId }: MissionDetailProps) {
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(false)}
       />
+
+      <ConfirmDialog
+        open={pendingComplete}
+        title="Mark mission finished?"
+        message={`Confirm that “${mission.name}” has been completed. This moves it to Completed.`}
+        confirmText="Yes, it's finished"
+        cancelText="Not yet"
+        onConfirm={confirmComplete}
+        onCancel={() => setPendingComplete(false)}
+      />
+
+      <ConfirmDialog
+        open={pendingStart}
+        title="Start this mission?"
+        message={`Mark “${mission.name}” as underway. This moves it to In Progress.`}
+        confirmText="Start mission"
+        cancelText="Not yet"
+        onConfirm={confirmStart}
+        onCancel={() => setPendingStart(false)}
+      />
+
+      <ConfirmDialog
+        open={pendingCancel}
+        title="Cancel this mission?"
+        message={`“${mission.name}” will be cancelled and any outstanding bids rejected. This cannot be undone.`}
+        confirmText="Cancel mission"
+        cancelText="Keep it"
+        danger
+        onConfirm={confirmCancel}
+        onCancel={() => setPendingCancel(false)}
+      />
+
+      <Toast toast={toast} />
     </>
   );
 }

@@ -24,10 +24,6 @@ import type { BidResponse } from "./bid.types";
  * into the `ApiError` that carries the server's `{ data, status, message }`
  * envelope (`fetch` resolves for those, where HttpClient throws).
  *
- * `accept` is the one method of `BidService` that is NOT ported: the award
- * flow is Phase 5 and `POST /api/v1/bids/{id}/accept` does not exist yet, so
- * it is absent rather than stubbed against a URL that would 404.
- *
  * SOURCE: drone-missions-frontend/.../services/bid.service.ts
  */
 
@@ -87,6 +83,26 @@ export async function fetchBidsForMission(missionId: number): Promise<Bid[]> {
 export async function fetchMyBids(): Promise<Bid[]> {
   const response = await ensureOk(await apiFetch(`${BASE_URL}/my`));
   return (await response.json()) as Bid[];
+}
+
+/**
+ * The owning designer awards their mission to this bid. Mirrors `accept`.
+ *
+ * Answers the accepted `Bid` alone, exactly as the source's
+ * `post<Bid>(.../accept, {})` does — the cascade behind it (every other bid
+ * rejected, the mission AWARDED, both sides notified) is not in the response,
+ * which is why every caller re-reads mission *and* bids afterwards rather than
+ * patching the returned bid into its list.
+ *
+ * The empty `{}` body Angular sends is dropped: `HttpClient.post` requires a
+ * body argument where `fetch` does not, and the route takes its whole input
+ * from the path, so there is nothing to send.
+ */
+export async function acceptBid(bidId: number): Promise<Bid> {
+  const response = await ensureOk(
+    await apiFetch(`${BASE_URL}/${bidId}/accept`, { method: "POST" }),
+  );
+  return (await response.json()) as Bid;
 }
 
 /** Withdraws (deletes) the caller's pending bid — 204, no body. Mirrors `withdraw`. */

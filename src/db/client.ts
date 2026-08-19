@@ -36,6 +36,40 @@ import * as schema from "./schema";
 
 type Database = PostgresJsDatabase<typeof schema>;
 
+/**
+ * The handle Drizzle hands a `db.transaction(async (tx) => …)` callback.
+ *
+ * Derived from `transaction()`'s own signature rather than imported from
+ * `drizzle-orm/pg-core`, so it cannot drift from whatever this Drizzle
+ * version actually passes in (the concrete `PgTransaction` type carries four
+ * generic parameters that would have to be repeated — and kept correct — by
+ * hand).
+ */
+export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * Either the pool or an open transaction — what every query function that can
+ * take part in a multi-statement flow accepts as its optional last argument.
+ *
+ * This is the port of what `@Transactional` does implicitly in Spring: there,
+ * a repository call inside a transactional service method joins the ambient
+ * transaction through a thread-bound `EntityManager`, so no call site mentions
+ * it. Drizzle has no ambient transaction — the handle *is* the transaction —
+ * so it has to be threaded explicitly. Both types share the same
+ * `PgDatabase` query-builder surface, which is why a query module can run
+ * unchanged against either.
+ */
+export type DbHandle = Database | Transaction;
+
+/**
+ * The handle a query should run on: the caller's transaction when it supplied
+ * one, otherwise the process-wide pool (auto-commit, one statement per call —
+ * exactly what a Spring repository call outside any transaction does).
+ */
+export function dbFor(tx?: DbHandle): DbHandle {
+  return tx ?? getDb();
+}
+
 const globalForDb = globalThis as unknown as {
   __droneMissionsSql?: postgres.Sql;
   __droneMissionsDb?: Database;

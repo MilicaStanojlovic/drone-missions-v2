@@ -5,16 +5,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getRole } from "@/features/auth/auth.client";
-import { RatingStars } from "@/features/ratings/components/rating-stars";
-import { MissionMap } from "./mission-map";
+import { MissionCard } from "./mission-card";
 import {
   MISSION_STATUS_COLORS,
-  MISSION_STATUS_LABELS,
   fetchMyMissions,
   fetchOpenMissions,
   type Mission,
 } from "../mission.client";
-import { distanceText } from "../mission.geo";
 import type { MissionStatus } from "../mission.types";
 
 /**
@@ -22,7 +19,8 @@ import type { MissionStatus } from "../mission.types";
  * - `mine` = true  → the designer dashboard (own missions + stat tiles).
  * - `mine` = false → the pilot feed / marketplace (open missions + filters).
  * Cards link to the mission detail; edit/delete live there. The pilot's bid
- * history lives on its own page (/my-bids).
+ * history and the jobs they have won live on their own pages (/my-bids,
+ * /my-jobs); the card itself is `MissionCard`, shared with the latter.
  *
  * Ports `MissionListComponent` — template, styles and behaviour. Angular's
  * route `data: { mine: true }` flag becomes the prop, since App Router has no
@@ -84,31 +82,6 @@ function queryString(filters: FilterValues): string {
 /** Ports `hasActiveFilters`. */
 function hasActiveFilters(filters: FilterValues): boolean {
   return !!(filters.keyword.trim() || filters.location.trim() || filters.date);
-}
-
-/** Path distance shown on a mission's card (— when it has no route). Ports `pathFor`. */
-function pathFor(mission: Mission): string {
-  const wps = mission.waypoints;
-  return wps && wps.length > 1 ? distanceText(wps) : "—";
-}
-
-/** "Jul 18 – Jul 22" style flight window from the mission's start/end times. Ports `formatWindow`. */
-function formatWindow(mission: Mission): string {
-  const fmt = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
-  if (!mission.startTime && !mission.endTime) {
-    return "TBD";
-  }
-  return `${fmt(mission.startTime)} – ${fmt(mission.endTime)}`;
-}
-
-/** Angular's `| date: 'mediumDate'` ("Jun 15, 2015"). */
-function mediumDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 const FILTER_INPUT =
@@ -363,74 +336,11 @@ export function MissionList({ mine = false }: MissionListProps) {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
           {missions.map((mission) => (
-            <Link
+            <MissionCard
               key={mission.id}
+              mission={mission}
               href={`/missions/${mission.id}${cardQuery}`}
-              className="bg-card group flex flex-col overflow-hidden rounded-[14px] border border-[#e8edf2] text-inherit no-underline shadow-[0_1px_2px_rgba(20,35,55,0.04)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-[#2f6bff] hover:shadow-[0_12px_28px_rgba(20,35,55,0.1)]"
-            >
-              <div className="relative aspect-[1000/640] border-b border-[#e8edf2] bg-[#eef1ec]">
-                <MissionMap
-                  interactive={false}
-                  waypoints={mission.waypoints ?? []}
-                  geofence={mission.geofence ?? null}
-                  className="absolute inset-0"
-                />
-                <span
-                  className="absolute top-2.5 right-2.5 inline-flex items-center gap-1.5 rounded-[20px] border border-transparent px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.1em] uppercase"
-                  style={{
-                    color: MISSION_STATUS_COLORS[mission.status],
-                    background: `${MISSION_STATUS_COLORS[mission.status]}1a`,
-                    borderColor: `${MISSION_STATUS_COLORS[mission.status]}55`,
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: MISSION_STATUS_COLORS[mission.status] }}
-                  />
-                  {MISSION_STATUS_LABELS[mission.status]}
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col px-4 pt-[15px] pb-4">
-                <div className="text-foreground mb-[5px] text-[15px] leading-[1.3] font-semibold">
-                  {mission.name}
-                </div>
-                {mission.location && (
-                  <div className="mb-3 font-mono text-xs text-[#6b7c8d]">{mission.location}</div>
-                )}
-                <div className="mb-3.5 flex gap-4 font-mono">
-                  <div>
-                    <div className="text-[9.5px] tracking-[0.08em] text-[#a2afbc] uppercase">
-                      Window
-                    </div>
-                    <div className="mt-[3px] text-[12.5px] text-[#43525f]">
-                      {formatWindow(mission)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[9.5px] tracking-[0.08em] text-[#a2afbc] uppercase">
-                      Path
-                    </div>
-                    <div className="mt-[3px] text-[12.5px] text-[#43525f]">{pathFor(mission)}</div>
-                  </div>
-                </div>
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1.5 border-t border-[#eef2f6] pt-3 font-mono text-xs text-[#93a1b0]">
-                  {mission.designerName && (
-                    <>
-                      <span className="font-sans text-[12.5px] font-semibold text-[#3c4a58]">
-                        by {mission.designerName}
-                      </span>
-                      <RatingStars
-                        average={mission.designerRating ?? 0}
-                        count={mission.designerRatingCount ?? 0}
-                        showEmpty={false}
-                      />
-                    </>
-                  )}
-                  <span className="ml-auto">Created {mediumDate(mission.createdAt)}</span>
-                </div>
-              </div>
-            </Link>
+            />
           ))}
         </div>
       )}

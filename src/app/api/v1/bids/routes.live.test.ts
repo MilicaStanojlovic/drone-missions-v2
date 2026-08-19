@@ -1,21 +1,23 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
-import { auditLog, bid, mission, users } from "@/db/schema";
+import { auditLog, bid, mission, notification, users } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import type { UserRole } from "@/db/schema";
 import { POST as registerRoute } from "../auth/register/route";
 import { POST as createMissionRoute } from "../missions/route";
+import { GET as missionDetailRoute } from "../missions/[id]/route";
 import { GET as listRoute, POST as placeRoute } from "./mission/[missionId]/route";
 import { GET as myBidsRoute } from "./my/route";
 import { DELETE as withdrawRoute } from "./[id]/route";
+import { POST as acceptRoute } from "./[id]/accept/route";
 
 /**
- * Route-level **integration** suite for the phase-3 bid endpoints: the real
- * handlers over the real `BidService`, the real caching mission DAO, the real
- * audit and email services, and a real Postgres, with nothing mocked.
+ * Route-level **integration** suite for the bid endpoints: the real handlers
+ * over the real `BidService`, the real caching mission DAO, the real audit,
+ * notification and email services, and a real Postgres, with nothing mocked.
  *
  * This is the live-DB counterpart of `routes.test.ts`, which mocks
  * `BidService` and therefore proves only what the web layer contributes (the
@@ -35,6 +37,11 @@ import { DELETE as withdrawRoute } from "./[id]/route";
  * - the owner-vs-pilot list split, which is a per-mission fact the service
  *   derives from `mission.userId`, not an endpoint property;
  * - withdraw deleting the row and leaving only its audit entry behind;
+ * - the accept cascade as one committed transaction: winner ACCEPTED, every
+ *   other bid REJECTED, mission AWARDED with its `awarded_pilot_id`, and the
+ *   post-commit cache eviction that makes the award visible to the very next
+ *   read of the mission — none of which the endpoint's own response shows,
+ *   since it returns only the winning bid;
  * - the best-effort new-bid email actually running end to end under
  *   `MAIL_ENABLED=false` — rendering the template and logging instead of
  *   sending, without breaking the bid.
@@ -558,6 +565,179 @@ describe.runIf(hasDb)("bid routes (live DB)", () => {
         `Bid ${placed.id} has already been decided and cannot be withdrawn`,
       );
       expect(await getDb().select().from(bid).where(eq(bid.id, placed.id))).toHaveLength(1);
+    });
+  });
+
+  describe("POST /api/v1/bids/{id}/accept", () => {
+    /** POSTs the award as the given user; no body, exactly as the client sends it. */
+    async function acceptBid(bidId: number, userId: number, role: UserRole = "DESIGNER") {
+      return acceptRoute(
+        new Request(`http://localhost/api/v1/bids/${bidId}/accept`, {
+          method: "POST",
+          headers: authHeaders(userId, role),
+        }),
+        idContext(bidId),
+      );
+    }
+
+    it("accepts the winner, rejects the other bids, awards the mission, and notifies both pilots", async () => {
+      const target = await createMission(designerId, { name: `Awardable ${runId}` });
+      const winning = await (
+        await placeBid(target.id, pilotId, { amount: 1000, message: "Pick me" })
+      ).json();
+      const losing = await (await placeBid(target.id, otherPilotId, { amount: 1100 })).json();
+      // Read the mission once *before* the award so the caching DAO holds a
+      // pre-award snapshot: the post-commit eviction is what the last
+      // assertion in this case is really about.
+      await missionDetailRoute(
+        getRequest(`http://localhost/api/v1/missions/${target.id}`, designerId, "DESIGNER"),
+        idContext(target.id),
+      );
+
+      const response = await acceptBid(winning.id, designerId);
+      const body = await response.json();
+
+      // The response is the single accepted bid — the source returns
+      // `BidResponse`, not the mission and not the losers.
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ id: winning.id, pilotId, status: "ACCEPTED" });
+
+      const rows = await getDb().select().from(bid).where(eq(bid.missionId, target.id));
+      expect(rows.find((row) => row.id === winning.id)?.status).toBe("ACCEPTED");
+      // Every *other* pending bid loses, in the same transaction.
+      expect(rows.find((row) => row.id === losing.id)?.status).toBe("REJECTED");
+
+      const [missionRow] = await getDb().select().from(mission).where(eq(mission.id, target.id));
+      expect(missionRow.status).toBe("AWARDED");
+      expect(missionRow.awardedPilotId).toBe(pilotId);
+
+      // One notification each, addressed by outcome.
+      const [winnerNote] = await getDb()
+        .select()
+        .from(notification)
+        .where(and(eq(notification.userId, pilotId), eq(notification.missionId, target.id)));
+      expect(winnerNote).toMatchObject({
+        type: "BID_ACCEPTED",
+        title: "Bid accepted",
+        message: `Your bid on "Awardable ${runId}" was accepted — the mission is yours.`,
+      });
+      const [loserNote] = await getDb()
+        .select()
+        .from(notification)
+        .where(and(eq(notification.userId, otherPilotId), eq(notification.missionId, target.id)));
+      expect(loserNote).toMatchObject({
+        type: "BID_REJECTED",
+        title: "Bid not selected",
+        message: `Your bid on "Awardable ${runId}" wasn't selected.`,
+      });
+
+      // Audited once, against the accepted bid, by the awarding designer.
+      const accepted = (await auditRowsFor(winning.id)).filter(
+        (entry) => entry.action === "BID_ACCEPTED",
+      );
+      expect(accepted).toHaveLength(1);
+      expect(accepted[0]).toMatchObject({
+        actorId: designerId,
+        actorRole: "DESIGNER",
+        targetType: "BID",
+        details: `1000 on "Awardable ${runId}"`,
+      });
+      // Nothing new was audited about the loser — only its own placement is
+      // there. The source records the acceptance and nothing about the
+      // rejections it cascades, so there is no audit action for one.
+      expect((await auditRowsFor(losing.id)).map((entry) => entry.action)).toEqual(["BID_PLACED"]);
+
+      // The cached pre-award copy was dropped after the commit, so the very
+      // next read of the mission already reports the award.
+      const detail = await missionDetailRoute(
+        getRequest(`http://localhost/api/v1/missions/${target.id}`, designerId, "DESIGNER"),
+        idContext(target.id),
+      );
+      expect((await detail.json()).status).toBe("AWARDED");
+    });
+
+    it("refuses a designer who does not own the mission with 403, leaving every bid pending", async () => {
+      const stranger = await registerTestUser("DESIGNER", "stranger");
+      const target = await createMission(designerId);
+      const placed = await (await placeBid(target.id, pilotId, { amount: 300 })).json();
+
+      const response = await acceptBid(placed.id, stranger);
+      const body = await response.json();
+
+      // 403, not 404: the ownership check runs before both conflict checks, so
+      // this is also what a stranger sees on an already-awarded mission.
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        status: "FORBIDDEN",
+        message: `You are not allowed to modify mission ${target.id}`,
+      });
+      const [row] = await getDb().select().from(bid).where(eq(bid.id, placed.id));
+      expect(row.status).toBe("PENDING");
+      const [missionRow] = await getDb().select().from(mission).where(eq(mission.id, target.id));
+      expect(missionRow.status).toBe("BIDDING");
+      expect(missionRow.awardedPilotId).toBeNull();
+    });
+
+    it("rejects a pilot with 403 before the service is reached (hasRole('DESIGNER'))", async () => {
+      const target = await createMission(designerId);
+      const placed = await (await placeBid(target.id, pilotId, { amount: 300 })).json();
+
+      // Not even the bid's own pilot may accept it.
+      const response = await acceptBid(placed.id, pilotId, "PILOT");
+
+      expect(response.status).toBe(403);
+      const [row] = await getDb().select().from(bid).where(eq(bid.id, placed.id));
+      expect(row.status).toBe("PENDING");
+    });
+
+    it("409s while the bid's pilot is suspended, and freezes the bid rather than rejecting it", async () => {
+      const frozenPilot = await registerTestUser("PILOT", "frozen");
+      const target = await createMission(designerId);
+      const placed = await (await placeBid(target.id, frozenPilot, { amount: 700 })).json();
+      await getDb().update(users).set({ suspended: true }).where(eq(users.id, frozenPilot));
+
+      const response = await acceptBid(placed.id, designerId);
+      const body = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(body.status).toBe("CONFLICT");
+      expect(body.message).toBe(
+        `Bid ${placed.id} cannot be accepted while its pilot is suspended`,
+      );
+      // Frozen, not rejected — reactivating the account makes it acceptable
+      // again, so nothing about the bid or the mission may have moved.
+      const [row] = await getDb().select().from(bid).where(eq(bid.id, placed.id));
+      expect(row.status).toBe("PENDING");
+      const [missionRow] = await getDb().select().from(mission).where(eq(mission.id, target.id));
+      expect(missionRow.status).toBe("BIDDING");
+
+      // And it goes through once the suspension is lifted.
+      await getDb().update(users).set({ suspended: false }).where(eq(users.id, frozenPilot));
+      expect((await acceptBid(placed.id, designerId)).status).toBe(200);
+    });
+
+    it("409s on a second award, because the mission is no longer open", async () => {
+      const target = await createMission(designerId);
+      const first = await (await placeBid(target.id, pilotId, { amount: 500 })).json();
+      const second = await (await placeBid(target.id, otherPilotId, { amount: 550 })).json();
+      expect((await acceptBid(first.id, designerId)).status).toBe(200);
+
+      const response = await acceptBid(second.id, designerId);
+      const body = await response.json();
+
+      // The mission guard fires before the bid-status one, so this is the
+      // message even though `second` is REJECTED by now.
+      expect(response.status).toBe(409);
+      expect(body.message).toBe(`Mission ${target.id} has already been awarded`);
+      const [missionRow] = await getDb().select().from(mission).where(eq(mission.id, target.id));
+      expect(missionRow.awardedPilotId).toBe(pilotId);
+    });
+
+    it("404s for a bid that does not exist", async () => {
+      const response = await acceptBid(999999999, designerId);
+
+      expect(response.status).toBe(404);
+      expect((await response.json()).status).toBe("NOT_FOUND");
     });
   });
 });

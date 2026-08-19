@@ -95,7 +95,9 @@ function fakeDelegate() {
     findFresh: vi.fn<MissionDao["findFresh"]>(async () => undefined),
     findOpen: vi.fn<MissionDao["findOpen"]>(async () => []),
     findByUserId: vi.fn<MissionDao["findByUserId"]>(async () => []),
+    findByAwardedPilotId: vi.fn<MissionDao["findByAwardedPilotId"]>(async () => []),
     invalidateLists: vi.fn<MissionDao["invalidateLists"]>(),
+    invalidate: vi.fn<MissionDao["invalidate"]>(),
     save: vi.fn<MissionDao["save"]>(),
     delete: vi.fn<MissionDao["delete"]>(async () => {}),
   };
@@ -288,6 +290,15 @@ describe("CachingMissionDao — list caching", () => {
     expect(delegate.findByUserId).toHaveBeenCalledTimes(1);
   });
 
+  it("caches the my-jobs list per pilot", async () => {
+    delegate.findByAwardedPilotId.mockResolvedValue([mission(1)]);
+
+    await cache.findByAwardedPilotId(7);
+    await cache.findByAwardedPilotId(7);
+
+    expect(delegate.findByAwardedPilotId).toHaveBeenCalledTimes(1);
+  });
+
   it("clears the list cache on a write", async () => {
     const query = openQuery(["PUBLISHED"]);
     const m = mission(1);
@@ -364,6 +375,22 @@ describe("CachingMissionDao — feed cache keys", () => {
 
     expect(delegate.findByUserId).toHaveBeenCalledTimes(1);
     expect(delegate.findOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the my-missions and my-jobs keys apart for one and the same id", async () => {
+    // The source draws this distinction with two `OwnerKey` kinds. Without it,
+    // a user who designs one mission and is the awarded pilot of another would
+    // be served whichever list happened to be loaded first.
+    delegate.findByUserId.mockResolvedValue([mission(1)]);
+    delegate.findByAwardedPilotId.mockResolvedValue([mission(2)]);
+
+    const designed = await cache.findByUserId(7);
+    const awarded = await cache.findByAwardedPilotId(7);
+
+    expect(designed.map((m) => m.id)).toEqual([1]);
+    expect(awarded.map((m) => m.id)).toEqual([2]);
+    expect(delegate.findByUserId).toHaveBeenCalledTimes(1);
+    expect(delegate.findByAwardedPilotId).toHaveBeenCalledTimes(1);
   });
 });
 

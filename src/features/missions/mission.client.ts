@@ -23,10 +23,11 @@ import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "./missio
  * through `apiFetch`, which attaches the Bearer token and handles session
  * expiry exactly as `authInterceptor` did.
  *
- * Only the endpoints this phase's API exposes are ported. `getMyJobs`,
- * `adminList`, `start`/`complete`/`cancel` and `hide`/`unhide`/`remove` have
- * no route yet (Phases 5 and 7) and are deliberately absent rather than
- * stubbed against URLs that would 404.
+ * Only the endpoints this phase's API exposes are ported. `getMyJobs` and
+ * `start`/`complete`/`cancel` joined in Phase 5, with the lifecycle routes
+ * that back them; `adminList` and `hide`/`unhide`/`remove` still have no route
+ * (Phase 7) and are deliberately absent rather than stubbed against URLs that
+ * would 404.
  *
  * SOURCE:
  * - drone-missions-frontend/.../services/mission.service.ts
@@ -177,6 +178,56 @@ export async function fetchOpenMissions(filters: FeedFilters = {}): Promise<Miss
 export async function fetchMyMissions(): Promise<Mission[]> {
   const response = await ensureOk(await apiFetch(`${BASE_URL}/my-missions`));
   return (await response.json()) as Mission[];
+}
+
+/**
+ * The missions awarded to the current pilot ("my jobs"). Mirrors `getMyJobs`.
+ *
+ * PILOT-only on the server (the source guards it with `hasRole('PILOT')`
+ * where `/my-missions` only wants an authenticated caller), so a designer
+ * calling this gets a 403 rather than an empty list.
+ */
+export async function fetchMyJobs(): Promise<Mission[]> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/my-jobs`));
+  return (await response.json()) as Mission[];
+}
+
+/**
+ * The awarded pilot starts their mission (AWARDED → IN_PROGRESS). Mirrors
+ * `start`.
+ *
+ * The empty `{}` body Angular sends is dropped throughout the three lifecycle
+ * calls below: `HttpClient.post` requires a body argument where `fetch` does
+ * not, and each route takes its whole input from the path plus the caller's
+ * token, so there is nothing to send.
+ *
+ * Starting is always a deliberate action — nothing anywhere in this port
+ * promotes a mission to IN_PROGRESS merely because its `startTime` passed, so
+ * this call is the only way the badge moves (see `mission.service.ts`).
+ */
+export async function startMission(id: number): Promise<Mission> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/${id}/start`, { method: "POST" }));
+  return (await response.json()) as Mission;
+}
+
+/** The awarded pilot marks a mission finished (IN_PROGRESS → COMPLETED). Mirrors `complete`. */
+export async function completeMission(id: number): Promise<Mission> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/${id}/complete`, { method: "POST" }));
+  return (await response.json()) as Mission;
+}
+
+/**
+ * The mission's creator cancels it (→ CANCELLED), rejecting any outstanding
+ * bids. Mirrors `cancel`.
+ *
+ * Like `accept`, the cascade behind it (every pending *and* accepted bid
+ * rejected, the awarded pilot notified) is not in the response, which is why
+ * callers re-read mission *and* bids afterwards rather than trusting the
+ * returned mission alone.
+ */
+export async function cancelMission(id: number): Promise<Mission> {
+  const response = await ensureOk(await apiFetch(`${BASE_URL}/${id}/cancel`, { method: "POST" }));
+  return (await response.json()) as Mission;
 }
 
 /** One mission by id. Mirrors `getById`. */

@@ -1,4 +1,5 @@
 import "server-only";
+import type { DbHandle } from "@/db/client";
 import { TtlCache, formatCacheStats, type CacheStats, type Clock } from "@/lib/cache";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -57,18 +58,18 @@ import type { Geofence, Mission, MissionWrite, Waypoint } from "./mission.types"
  *   row. It is bounded by the TTL and harmless in practice, because no write
  *   path ever reads from the cache — that is what `findFresh` is for.
  *
- * ## Not ported: transaction-scoped re-eviction
+ * ## Eviction after a transaction
  * The Java `invalidate()` evicts twice — immediately, and again from an
  * `afterCompletion` transaction synchronisation, so that a concurrent reader
  * repopulating the cache mid-transaction cannot outlive the commit (or the
- * rollback). There is no equivalent here: Drizzle has no ambient transaction
- * manager to register a synchronisation with, and nothing in the port's write
- * paths runs inside a transaction — every write below commits by the time
- * `save`/`delete` resolves, so the immediate eviction already happens after the
- * commit. The two flows that *are* `@Transactional` in the source (mission
- * cancellation, bid acceptance) arrive in Phases 3/5; when they do, they must
- * evict after their `db.transaction(...)` callback returns rather than inside
- * it. Noted here so that requirement is not lost.
+ * rollback). Drizzle has no ambient transaction manager to register a
+ * synchronisation with, so the second eviction is not automatic here: a write
+ * that took a `tx` handle still evicts immediately (below), and its caller
+ * must call `invalidate(id)` itself once `db.transaction(...)` has returned.
+ * `bid.service.ts`'s `accept` does exactly that, and any later transactional
+ * flow (mission cancellation, Phase 5) must too. A write with no `tx` needs
+ * nothing extra — it commits by the time `save`/`delete` resolves, so its
+ * immediate eviction already happens after the commit.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/access/CachingMissionDao.java
@@ -83,11 +84,17 @@ import type { Geofence, Mission, MissionWrite, Waypoint } from "./mission.types"
  * implemented both by the plain query module and by the decorator below, which
  * is what lets the cache be swapped in without a single call site changing.
  *
- * The methods the source declares but this phase does not have queries for
- * (`findByAwardedPilotId`, `findOverdue`, `searchAll`, `countByStatus`) are
- * absent rather than stubbed; the phases that add those queries add them here
- * too. All four are *uncached* pass-throughs in the source, so nothing about
- * the caching semantics is deferred with them.
+ * The methods the source declares but this port does not yet have queries for
+ * (`findOverdue`, `searchAll`, `countByStatus`) are absent rather than
+ * stubbed; the phases that add those queries add them here too. All three are
+ * *uncached* pass-throughs in the source, so nothing about the caching
+ * semantics is deferred with them.
+ *
+ * `findByAwardedPilotId` is not in that group and never was: the source
+ * caches it, under its own `OwnerKey("byPilot", …)`, exactly as it caches
+ * `findByUserId`. (An earlier revision of this comment listed it among the
+ * uncached four — that was wrong about the source, and the method is now
+ * implemented below with the list caching the decorator actually gives it.)
  */
 export interface MissionDao {
   /** Read-only lookup — may be served from cache. Never pass the result to `save`. */
@@ -98,14 +105,31 @@ export interface MissionDao {
   findOpen(query: OpenMissionQuery): Promise<Mission[]>;
   /** Missions created by this user. */
   findByUserId(userId: number): Promise<Mission[]>;
+  /** Missions awarded to this pilot. */
+  findByAwardedPilotId(pilotId: number): Promise<Mission[]>;
   /**
    * Drop every cached list. For moderation events that change feed membership
    * without a mission write — suspending a designer hides their missions, but
    * the write lands on the users table, which this decorator never observes.
    */
   invalidateLists(): void;
-  /** Persist a new or modified mission. Invalidates any cached copy. */
-  save(input: MissionWrite): Promise<Mission>;
+  /**
+   * Drop one mission's cached copy (and every cached list, since any write
+   * can change membership). The port of `CachingMissionDao.invalidate`, which
+   * has no counterpart on the Java *interface* because there it is private
+   * and runs a second time from a transaction synchronisation — see the
+   * "after a transaction" note in this module's header for why a
+   * transactional caller has to call it by hand here.
+   */
+  invalidate(id: number): void;
+  /**
+   * Persist a new or modified mission. Invalidates any cached copy.
+   *
+   * `tx` runs the write on a caller's open transaction (`BidService.accept`);
+   * the eviction still happens immediately, and the caller evicts again after
+   * its commit via `invalidate`.
+   */
+  save(input: MissionWrite, tx?: DbHandle): Promise<Mission>;
   /** Delete a mission. Invalidates any cached copy. */
   delete(target: Pick<Mission, "id">): Promise<void>;
 }
@@ -296,6 +320,18 @@ export class CachingMissionDao implements MissionDao {
   }
 
   /**
+   * Cached under `"byPilot"`, a key kept distinct from the `"byUser"` one so
+   * that a designer who is also the awarded pilot of some mission cannot have
+   * one list served for the other. Mirrors the source's two `OwnerKey`
+   * records.
+   */
+  async findByAwardedPilotId(pilotId: number): Promise<Mission[]> {
+    return this.cachedList(ownerKey("byPilot", pilotId), () =>
+      this.delegate.findByAwardedPilotId(pilotId),
+    );
+  }
+
+  /**
    * Feed membership changed without a mission write (a designer was suspended
    * or reactivated). Only the id arrays go; the entity rows are still correct.
    */
@@ -303,10 +339,19 @@ export class CachingMissionDao implements MissionDao {
     this.lists.clear();
   }
 
+  /**
+   * Drop one mission's cached copy and every cached list. Public only so a
+   * transactional caller can re-evict after its commit — the hand-run half of
+   * the source's `afterCompletion` synchronisation.
+   */
+  invalidate(id: number): void {
+    this.evictNow(id);
+  }
+
   // ---- writes ----
 
-  async save(input: MissionWrite): Promise<Mission> {
-    const saved = await this.delegate.save(input);
+  async save(input: MissionWrite, tx?: DbHandle): Promise<Mission> {
+    const saved = await this.delegate.save(input, tx);
     // Never cache `saved`: read-through only, mirroring the source's refusal to
     // store a row whose update timestamp the database may still be settling.
     this.evictNow(saved.id);
@@ -414,7 +459,9 @@ const uncachedMissionDao: MissionDao = {
   findFresh: queries.findFresh,
   findOpen: queries.findOpen,
   findByUserId: queries.findByUserId,
+  findByAwardedPilotId: queries.findByAwardedPilotId,
   invalidateLists: () => {},
+  invalidate: () => {},
   save: queries.save,
   delete: queries.deleteMission,
 };

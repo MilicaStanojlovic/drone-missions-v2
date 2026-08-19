@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Bid } from "@/features/bids/bid.types";
 import type { User } from "@/features/users/user.types";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { UserNotFoundError } from "@/features/users/user.queries";
@@ -23,6 +24,17 @@ import type { OpenMissionQuery } from "./mission.queries";
  * `MissionControllerTest` are covered here too, since this port's route
  * handlers are thin and those rules live entirely in this module.
  *
+ * The same applies to the Phase-5 lifecycle (`start`, `complete`, `cancel`,
+ * `findAwardedTo`): the Java suite has no case for any of them, so the rules
+ * pinned below come from `MissionService`'s own javadoc and code — one case
+ * per guard, the happy path of each transition, and for `cancel` the atomic
+ * bid rejection (PENDING *and* ACCEPTED) plus the awarded pilot's
+ * notification and email. Two absences are asserted deliberately, because
+ * both are behaviour: `start`/`complete` raise no notification and no email,
+ * and **no read ever changes a status** — there is no lazy
+ * AWARDED -> IN_PROGRESS promotion in the source, contrary to what the
+ * migration plan claims (see the service module's header).
+ *
  * The DAO is mocked the same way the Java test mocks `MissionDao` — so these
  * assertions are about the query this service *builds*, not about SQL — and
  * `audit.ts` is only partially mocked: `record()` (the DB write) is a spy
@@ -38,16 +50,63 @@ const daoMock = {
   findFresh: vi.fn(),
   findOpen: vi.fn(),
   findByUserId: vi.fn(),
+  findByAwardedPilotId: vi.fn(),
   invalidateLists: vi.fn(),
+  invalidate: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
 };
 vi.mock("./mission.cache", () => ({ getMissionDao: () => daoMock }));
 
+/**
+ * The stand-in for the handle Drizzle passes a `db.transaction` callback. The
+ * service only ever forwards it to the query layer, so an opaque sentinel is
+ * enough — and it is what lets the `cancel` assertions prove each write really
+ * ran on the transaction rather than on the pool.
+ *
+ * It is also this suite's one blind spot: a stub cannot show that a failure
+ * part-way through leaves the database unchanged, which only a real
+ * transaction can. `mission.service.live.test.ts` covers that by injecting a
+ * failing step into an open transaction over real rows; the case below pins
+ * the half that lives above the database (nothing after the commit runs).
+ */
+const txHandle = { __transaction: true };
+const transactionMock = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(txHandle));
+vi.mock("@/db/client", () => ({
+  getDb: () => ({ transaction: (run: (tx: unknown) => Promise<unknown>) => transactionMock(run) }),
+}));
+
+const findBidsMock = vi.fn();
+const saveBidMock = vi.fn();
+vi.mock("@/features/bids/bid.queries", () => ({
+  findByMissionOrderByCreatedAtDesc: (...args: unknown[]) => findBidsMock(...args),
+  save: (...args: unknown[]) => saveBidMock(...args),
+}));
+
+const createNotificationMock = vi.fn();
+vi.mock("@/features/notifications/notification.service", () => ({
+  create: (...args: unknown[]) => createNotificationMock(...args),
+}));
+
+const sendMissionCancelledMock = vi.fn();
+vi.mock("@/lib/email/email.service", () => ({
+  emailService: {
+    sendNewBid: vi.fn(),
+    sendBidDecision: vi.fn(),
+    sendMissionOverdue: vi.fn(),
+    sendMissionCancelled: (...args: unknown[]) => sendMissionCancelledMock(...args),
+  },
+}));
+
 const findUserByIdMock = vi.fn();
+const findUserByIdOrUndefinedMock = vi.fn();
 vi.mock("@/features/users/user.queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
-  return { ...actual, findById: (...args: unknown[]) => findUserByIdMock(...args) };
+  return {
+    ...actual,
+    findById: (...args: unknown[]) => findUserByIdMock(...args),
+    findByIdOrUndefined: (...args: unknown[]) => findUserByIdOrUndefinedMock(...args),
+  };
 });
 
 const recordMock = vi.fn();
@@ -59,13 +118,18 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 // `vi.mock` calls above are hoisted by Vitest, so these static imports
 // already resolve against the mocked modules.
 import {
+  cancel,
+  complete,
   create,
   deleteMission,
+  findAwardedTo,
   findById,
   findOpen,
   findOwnedBy,
   MissionAccessDeniedError,
+  MissionConflictError,
   MissionNotFoundError,
+  start,
   update,
   type MissionDraft,
 } from "./mission.service";
@@ -105,6 +169,26 @@ function fakeMission(overrides: Partial<Mission> = {}): Mission {
     createdAt: new Date("2026-04-01T00:00:00Z"),
     updatedAt: new Date("2026-04-01T00:00:00Z"),
     designer: fakeUser(),
+    ...overrides,
+  };
+}
+
+/**
+ * A bid on mission 4 as the bid query layer hands it back — relations
+ * resolved by the join. Only `cancel` reads these.
+ */
+function fakeBid(overrides: Partial<Bid> = {}): Bid {
+  return {
+    id: 11,
+    missionId: 4,
+    pilotId: 5,
+    amount: 250,
+    message: null,
+    status: "PENDING",
+    createdAt: new Date("2026-04-02T00:00:00Z"),
+    updatedAt: new Date("2026-04-02T00:00:00Z"),
+    mission: { id: 4, name: "Orchard survey" },
+    pilot: { id: overrides.pilotId ?? 5, username: "pia" },
     ...overrides,
   };
 }
@@ -432,6 +516,390 @@ describe("mission.service.ts", () => {
 
       await expect(deleteMission(4, 7)).rejects.toBeInstanceOf(MissionNotFoundError);
       expect(daoMock.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("findAwardedTo", () => {
+    it("returns the pilot's jobs whatever their status or moderation", async () => {
+      // A job stays on this list after it leaves the open statuses and after
+      // the marketplace hides it — the awarded pilot is exempt from both.
+      const jobs = [
+        fakeMission({ status: "IN_PROGRESS", moderation: "HIDDEN", awardedPilotId: 5 }),
+      ];
+      daoMock.findByAwardedPilotId.mockResolvedValue(jobs);
+
+      await expect(findAwardedTo(5)).resolves.toBe(jobs);
+      expect(daoMock.findByAwardedPilotId).toHaveBeenCalledWith(5);
+    });
+
+    it("never writes — listing a job cannot advance it to IN_PROGRESS", async () => {
+      // The guard on the flagged plan-vs-source discrepancy: the plan claims
+      // an AWARDED mission whose startTime has passed is promoted lazily on
+      // read. The source has no such path, so neither does this.
+      const past = new Date(Date.now() - 86_400_000);
+      daoMock.findByAwardedPilotId.mockResolvedValue([
+        fakeMission({ status: "AWARDED", awardedPilotId: 5, startTime: past, endTime: past }),
+      ]);
+
+      const [job] = await findAwardedTo(5);
+
+      expect(job.status).toBe("AWARDED");
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("findById leaves an overdue AWARDED mission exactly as it found it", async () => {
+      const past = new Date(Date.now() - 86_400_000);
+      daoMock.findById.mockResolvedValue(
+        fakeMission({ status: "AWARDED", awardedPilotId: 5, startTime: past, endTime: past }),
+      );
+
+      await expect(findById(4, 5)).resolves.toMatchObject({ status: "AWARDED" });
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("start", () => {
+    /** An AWARDED mission owned by designer 7 and awarded to pilot 5. */
+    function awarded(overrides: Partial<Mission> = {}): Mission {
+      return fakeMission({ status: "AWARDED", userId: 7, awardedPilotId: 5, ...overrides });
+    }
+
+    it("moves AWARDED to IN_PROGRESS and audits MISSION_STARTED as the pilot", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+      const saved = awarded({ status: "IN_PROGRESS" });
+      daoMock.save.mockResolvedValue(saved);
+
+      const result = await start(4, 5);
+
+      expect(result).toBe(saved);
+      // A write path, so the live row — never the cacheable lookup.
+      expect(daoMock.findFresh).toHaveBeenCalledWith(4);
+      expect(daoMock.findById).not.toHaveBeenCalled();
+      const written = daoMock.save.mock.calls[0][0];
+      expect(written.id).toBe(4);
+      expect(written.status).toBe("IN_PROGRESS");
+      expect(written.awardedPilotId).toBe(5);
+
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 5,
+        // PILOT, not DESIGNER: the constant restates who is allowed to start it.
+        actorRole: "PILOT",
+        action: "MISSION_STARTED",
+        targetType: "MISSION",
+        targetId: 4,
+        details: '"Orchard survey"',
+      });
+    });
+
+    it("raises no notification and sends no email", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+      daoMock.save.mockResolvedValue(awarded({ status: "IN_PROGRESS" }));
+
+      await start(4, 5);
+
+      expect(createNotificationMock).not.toHaveBeenCalled();
+      expect(sendMissionCancelledMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects anyone who is not the awarded pilot with 403", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+
+      // Including the mission's own designer: starting is the pilot's act.
+      await expect(start(4, 7)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects everyone while no pilot has been awarded", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "BIDDING", awardedPilotId: null }));
+
+      await expect(start(4, 5)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("rejects a suspended awarded pilot", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT", suspended: true }));
+
+      await expect(start(4, 5)).rejects.toBeInstanceOf(UserSuspendedError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses any status other than AWARDED, naming it in the conflict", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "IN_PROGRESS" }));
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+
+      // Started once, never started twice.
+      await expect(start(4, 5)).rejects.toThrow(
+        "Mission 4 cannot be started from status IN_PROGRESS",
+      );
+      await expect(start(4, 5)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("throws MissionNotFoundError for a missing mission", async () => {
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(start(4, 5)).rejects.toBeInstanceOf(MissionNotFoundError);
+    });
+  });
+
+  describe("complete", () => {
+    /** An IN_PROGRESS mission owned by designer 7 and awarded to pilot 5. */
+    function underway(overrides: Partial<Mission> = {}): Mission {
+      return fakeMission({ status: "IN_PROGRESS", userId: 7, awardedPilotId: 5, ...overrides });
+    }
+
+    it("moves IN_PROGRESS to COMPLETED and audits MISSION_COMPLETED as the pilot", async () => {
+      daoMock.findFresh.mockResolvedValue(underway());
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+      const saved = underway({ status: "COMPLETED" });
+      daoMock.save.mockResolvedValue(saved);
+
+      const result = await complete(4, 5);
+
+      expect(result).toBe(saved);
+      expect(daoMock.findFresh).toHaveBeenCalledWith(4);
+      expect(daoMock.findById).not.toHaveBeenCalled();
+      expect(daoMock.save.mock.calls[0][0].status).toBe("COMPLETED");
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 5,
+        actorRole: "PILOT",
+        action: "MISSION_COMPLETED",
+        targetType: "MISSION",
+        targetId: 4,
+        details: '"Orchard survey"',
+      });
+      expect(createNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects anyone who is not the awarded pilot with 403", async () => {
+      daoMock.findFresh.mockResolvedValue(underway());
+
+      await expect(complete(4, 7)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("rejects a suspended awarded pilot", async () => {
+      daoMock.findFresh.mockResolvedValue(underway());
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT", suspended: true }));
+
+      await expect(complete(4, 5)).rejects.toBeInstanceOf(UserSuspendedError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses a mission that was never started", async () => {
+      daoMock.findFresh.mockResolvedValue(underway({ status: "AWARDED" }));
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+
+      await expect(complete(4, 5)).rejects.toThrow(
+        "Mission 4 cannot be completed from status AWARDED",
+      );
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses to complete an already completed mission", async () => {
+      daoMock.findFresh.mockResolvedValue(underway({ status: "COMPLETED" }));
+      findUserByIdMock.mockResolvedValue(fakeUser({ id: 5, role: "PILOT" }));
+
+      await expect(complete(4, 5)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("throws MissionNotFoundError for a missing mission", async () => {
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(complete(4, 5)).rejects.toBeInstanceOf(MissionNotFoundError);
+    });
+  });
+
+  describe("cancel", () => {
+    /** An AWARDED mission owned by designer 7, awarded to pilot 5. */
+    function awarded(overrides: Partial<Mission> = {}): Mission {
+      return fakeMission({ status: "AWARDED", userId: 7, awardedPilotId: 5, ...overrides });
+    }
+
+    beforeEach(() => {
+      findBidsMock.mockResolvedValue([]);
+      saveBidMock.mockImplementation(async (input: unknown) => input);
+      findUserByIdOrUndefinedMock.mockResolvedValue(
+        fakeUser({ id: 5, username: "pia", email: "pia@example.com", role: "PILOT" }),
+      );
+    });
+
+    it("cancels the mission and audits MISSION_CANCELLED as the designer", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "BIDDING", awardedPilotId: null }));
+      const saved = awarded({ status: "CANCELLED", awardedPilotId: null });
+      daoMock.save.mockResolvedValue(saved);
+
+      const result = await cancel(4, 7);
+
+      expect(result).toBe(saved);
+      expect(daoMock.findFresh).toHaveBeenCalledWith(4);
+      expect(daoMock.findById).not.toHaveBeenCalled();
+      expect(daoMock.save.mock.calls[0][0].status).toBe("CANCELLED");
+      expect(recordMock.mock.calls[0][0]).toMatchObject({
+        actorId: 7,
+        actorRole: "DESIGNER",
+        action: "MISSION_CANCELLED",
+        targetType: "MISSION",
+        targetId: 4,
+        details: '"Orchard survey"',
+      });
+    });
+
+    it("rejects every PENDING and ACCEPTED bid, leaving decided ones alone", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+      findBidsMock.mockResolvedValue([
+        fakeBid({ id: 11, status: "ACCEPTED", pilotId: 5 }),
+        fakeBid({ id: 12, status: "PENDING", pilotId: 6 }),
+        fakeBid({ id: 13, status: "REJECTED", pilotId: 8 }),
+      ]);
+
+      await cancel(4, 7);
+
+      // The winner's own ACCEPTED bid goes too — the work no longer exists.
+      expect(saveBidMock).toHaveBeenCalledTimes(2);
+      const written = saveBidMock.mock.calls.map((call) => call[0]);
+      expect(written.map((b) => b.id)).toEqual([11, 12]);
+      expect(written.every((b) => b.status === "REJECTED")).toBe(true);
+    });
+
+    it("writes the mission and the bids on one transaction, then evicts the cache", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+      findBidsMock.mockResolvedValue([fakeBid({ id: 11, status: "PENDING" })]);
+
+      await cancel(4, 7);
+
+      expect(transactionMock).toHaveBeenCalledTimes(1);
+      // Every write carries the transaction handle: a mission left CANCELLED
+      // beside an ACCEPTED bid is the state this atomicity exists to prevent.
+      expect(daoMock.save.mock.calls[0][1]).toBe(txHandle);
+      expect(findBidsMock).toHaveBeenCalledWith(4, txHandle);
+      expect(saveBidMock.mock.calls[0][1]).toBe(txHandle);
+      // The hand-run half of the source's `afterCompletion` eviction.
+      expect(daoMock.invalidate).toHaveBeenCalledWith(4);
+    });
+
+    it("propagates a mid-transaction failure and runs none of the post-commit work", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+      findBidsMock.mockResolvedValue([fakeBid({ id: 11, status: "ACCEPTED", pilotId: 5 })]);
+      // The rejection fails after the mission has already been written
+      // CANCELLED. What that rolls *back* is a property of a real Postgres
+      // transaction and is pinned in `mission.service.live.test.ts`, where the
+      // failure is injected into an open transaction over real rows; what a
+      // stubbed `transaction()` can show is the other half — that everything
+      // sequenced after the commit is skipped.
+      saveBidMock.mockRejectedValue(new Error("bid rejection failed"));
+
+      await expect(cancel(4, 7)).rejects.toThrow("bid rejection failed");
+
+      // No second eviction, no notification, no email, no audit entry: the
+      // failure surfaces to the caller instead of a cancellation being
+      // announced that the database never kept.
+      expect(daoMock.invalidate).not.toHaveBeenCalled();
+      expect(createNotificationMock).not.toHaveBeenCalled();
+      expect(sendMissionCancelledMock).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("notifies and emails the awarded pilot", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+
+      await cancel(4, 7);
+
+      expect(createNotificationMock).toHaveBeenCalledTimes(1);
+      expect(createNotificationMock.mock.calls[0][0]).toMatchObject({
+        userId: 5,
+        type: "MISSION_CANCELLED",
+        title: "Mission cancelled",
+        message: '"Orchard survey" was cancelled by the designer.',
+      });
+      expect(sendMissionCancelledMock).toHaveBeenCalledWith(
+        { email: "pia@example.com", username: "pia" },
+        { id: 4, name: "Orchard survey", location: "Novi Sad" },
+      );
+    });
+
+    it("tells nobody when the mission was never awarded", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "BIDDING", awardedPilotId: null }));
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED", awardedPilotId: null }));
+      findBidsMock.mockResolvedValue([fakeBid({ id: 12, status: "PENDING" })]);
+
+      await cancel(4, 7);
+
+      // The losing bidders are rejected, not notified — the source announces
+      // the cancellation only to the pilot who had already won it.
+      expect(saveBidMock).toHaveBeenCalledTimes(1);
+      expect(createNotificationMock).not.toHaveBeenCalled();
+      expect(sendMissionCancelledMock).not.toHaveBeenCalled();
+      expect(recordMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("still cancels when the awarded pilot's account has since vanished", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+      findUserByIdOrUndefinedMock.mockResolvedValue(undefined);
+
+      await cancel(4, 7);
+
+      // `.ifPresent` in the source: an absent mailbox never undoes a write.
+      expect(sendMissionCancelledMock).not.toHaveBeenCalled();
+      expect(createNotificationMock).toHaveBeenCalledTimes(1);
+      expect(recordMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects a non-owner with 403 and opens no transaction", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded());
+
+      // Not even the awarded pilot may cancel: it is the designer's act.
+      await expect(cancel(4, 5)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+      expect(transactionMock).not.toHaveBeenCalled();
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a COMPLETED mission, naming the status", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "COMPLETED" }));
+
+      await expect(cancel(4, 7)).rejects.toThrow(
+        "Mission 4 cannot be cancelled from status COMPLETED",
+      );
+      await expect(cancel(4, 7)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(transactionMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a mission that is already CANCELLED", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "CANCELLED" }));
+
+      await expect(cancel(4, 7)).rejects.toBeInstanceOf(MissionConflictError);
+      expect(daoMock.save).not.toHaveBeenCalled();
+    });
+
+    it("cancels a mission that is already underway", async () => {
+      daoMock.findFresh.mockResolvedValue(awarded({ status: "IN_PROGRESS" }));
+      daoMock.save.mockResolvedValue(awarded({ status: "CANCELLED" }));
+
+      // Allowed from every status short of COMPLETED — which is exactly why
+      // the pilot flying it has to be told.
+      await cancel(4, 7);
+
+      expect(daoMock.save.mock.calls[0][0].status).toBe("CANCELLED");
+      expect(createNotificationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws MissionNotFoundError for a missing mission", async () => {
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(cancel(4, 7)).rejects.toBeInstanceOf(MissionNotFoundError);
+      expect(transactionMock).not.toHaveBeenCalled();
     });
   });
 });

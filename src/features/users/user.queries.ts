@@ -42,11 +42,26 @@ export async function existsByEmail(email: string): Promise<boolean> {
 }
 
 /**
+ * Mirrors `UserRepository.findById` unchanged — `undefined` when no row
+ * matches, for the callers that treat an absent account as "nothing to do"
+ * rather than an error. `BidService.notifyDecision` is exactly that shape
+ * (`userRepository.findById(pilotId).ifPresent(pilot -> …)`: no account, no
+ * decision email, and the acceptance still stands).
+ *
+ * `findById` below is the same query with `UserService.findById`'s
+ * `orElseThrow` folded in; both exist because the source has both usages.
+ */
+export async function findByIdOrUndefined(id: number): Promise<User | undefined> {
+  const [user] = await getDb().select().from(users).where(eq(users.id, id));
+  return user;
+}
+
+/**
  * @throws UserNotFoundError if no user has the given id — mirrors
  * `UserService.findById`'s `orElseThrow(() -> new UserNotFoundException(id))`.
  */
 export async function findById(id: number): Promise<User> {
-  const [user] = await getDb().select().from(users).where(eq(users.id, id));
+  const user = await findByIdOrUndefined(id);
   if (!user) {
     throw new UserNotFoundError(id);
   }

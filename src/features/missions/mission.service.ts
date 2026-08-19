@@ -1,7 +1,23 @@
 import "server-only";
-import { missionCreated, missionDeleted, missionUpdated, record } from "@/lib/audit";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
-import { findById as findUserById } from "@/features/users/user.queries";
+import { getDb } from "@/db/client";
+import {
+  missionCancelled,
+  missionCompleted,
+  missionCreated,
+  missionDeleted,
+  missionStarted,
+  missionUpdated,
+  record,
+} from "@/lib/audit";
+import { emailService } from "@/lib/email/email.service";
+import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
+import * as bidQueries from "@/features/bids/bid.queries";
+import { create as createNotification } from "@/features/notifications/notification.service";
+import { NewNotification } from "@/features/notifications/notification.types";
+import {
+  findById as findUserById,
+  findByIdOrUndefined as findUserByIdOrUndefined,
+} from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { getMissionDao } from "./mission.cache";
 import type { Mission, MissionStatus, MissionWrite } from "./mission.types";
@@ -10,10 +26,21 @@ import type { Mission, MissionStatus, MissionWrite } from "./mission.types";
  * Mission business logic (replaces `business.service.mission.MissionService`).
  *
  * Phase-2 slice: `create`, `findOpen`, `findOwnedBy`, `findById`, `update`,
- * `delete`. The lifecycle transitions (`start`/`complete`/`cancel` and
- * `findAwardedTo`) are Phase 5, moderation (`hide`/`unhide`/`remove`) and the
+ * `delete`; Phase 5 adds the lifecycle transitions (`start`, `complete`,
+ * `cancel`) and `findAwardedTo`. Moderation (`hide`/`unhide`/`remove`) and the
  * admin listing (`searchAll`) are Phase 7 — each lands with the routes that
  * call it.
+ *
+ * ## The lifecycle never advances on its own
+ * A mission moves AWARDED -> IN_PROGRESS -> COMPLETED only because the awarded
+ * pilot said so, and to CANCELLED only because the owning designer said so.
+ * There is deliberately **no** lazy transition on read: nothing here (or
+ * anywhere else in this port) promotes an AWARDED mission to IN_PROGRESS
+ * because its `startTime` has passed. That mirrors the source exactly —
+ * `MissionService.start`'s javadoc states "a mission never advances on its
+ * own", and `IN_PROGRESS` is assigned in that one method and nowhere else in
+ * `src/main/java`. The migration plan and the Angular repo's notes claim such
+ * an on-read promotion exists; it does not, and the source wins.
  *
  * Every read and write goes through `getMissionDao()` rather than
  * `mission.queries.ts` directly, so the caching decorator observes all of
@@ -53,6 +80,23 @@ export class MissionNotFoundError extends NotFoundError {
 export class MissionAccessDeniedError extends ForbiddenError {
   constructor(missionId: number) {
     super(`You are not allowed to modify mission ${missionId}`);
+  }
+}
+
+/**
+ * Thrown when a mission action conflicts with its current lifecycle status —
+ * starting one that was never awarded, completing one that has not started,
+ * cancelling one that is already finished. Mirrors
+ * `MissionConflictException`; the base (`ConflictError`) maps to 409.
+ *
+ * The message is passed in rather than built from an id, exactly as in the
+ * source: each call site words the conflict differently (and names the status
+ * it refused), and the Angular client surfaces the text verbatim in its error
+ * toast.
+ */
+export class MissionConflictError extends ConflictError {
+  constructor(message: string) {
+    super(message);
   }
 }
 
@@ -190,6 +234,20 @@ export async function findOwnedBy(currentUserId: number): Promise<Mission[]> {
 }
 
 /**
+ * The missions awarded to the calling pilot — their "jobs". Mirrors
+ * `MissionService.findAwardedTo`.
+ *
+ * A plain pass-through with no visibility filter, exactly as in the source:
+ * the awarded pilot is one of the two people `isVisibleTo` lets past
+ * unconditionally, so a job stays on this list even after the mission leaves
+ * the open statuses or is hidden from the marketplace. Reading it changes
+ * nothing about a mission's status — see this module's header.
+ */
+export async function findAwardedTo(pilotId: number): Promise<Mission[]> {
+  return getMissionDao().findByAwardedPilotId(pilotId);
+}
+
+/**
  * Looks up one mission the caller is allowed to see. Mirrors
  * `MissionService.findById`.
  *
@@ -259,6 +317,155 @@ export async function deleteMission(id: number, currentUserId: number): Promise<
   await record(missionDeleted(currentUserId, mission));
 }
 
+/**
+ * The awarded pilot starts the mission, moving it AWARDED -> IN_PROGRESS.
+ * Mirrors `MissionService.start`.
+ *
+ * Only the awarded pilot may start it, and only while it is still AWARDED.
+ * Starting is a deliberate action — a mission never advances on its own, which
+ * is why there is no on-read promotion anywhere in this module (see the header).
+ *
+ * Neither a notification nor an email is raised: the source sends none here,
+ * and none on `complete` either. The designer learns of the change from the
+ * mission itself; only cancellation, whose loser is a pilot who was counting
+ * on the work, is announced.
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ * @throws MissionAccessDeniedError if the caller is not the awarded pilot
+ * @throws UserSuspendedError if the awarded pilot's account is suspended
+ * @throws MissionConflictError if the mission is not AWARDED
+ */
+export async function start(id: number, pilotId: number): Promise<Mission> {
+  const mission = await getFreshOrThrow(id);
+  requireAwardedPilot(mission, pilotId);
+  await requireUnsuspended(pilotId);
+  if (mission.status !== "AWARDED") {
+    throw new MissionConflictError(`Mission ${id} cannot be started from status ${mission.status}`);
+  }
+  const saved = await getMissionDao().save({ ...mission, status: "IN_PROGRESS" });
+  await record(missionStarted(pilotId, saved));
+  return saved;
+}
+
+/**
+ * The winning pilot marks the mission finished, moving it to COMPLETED.
+ * Mirrors `MissionService.complete`.
+ *
+ * The same two guards as `start`, differing only in the status it demands: the
+ * mission must actually be underway (IN_PROGRESS), so it has to be started
+ * first and cannot be completed twice. No notification, no email — as in
+ * `start`.
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ * @throws MissionAccessDeniedError if the caller is not the awarded pilot
+ * @throws UserSuspendedError if the awarded pilot's account is suspended
+ * @throws MissionConflictError if the mission is not IN_PROGRESS
+ */
+export async function complete(id: number, pilotId: number): Promise<Mission> {
+  const mission = await getFreshOrThrow(id);
+  requireAwardedPilot(mission, pilotId);
+  await requireUnsuspended(pilotId);
+  if (mission.status !== "IN_PROGRESS") {
+    throw new MissionConflictError(
+      `Mission ${id} cannot be completed from status ${mission.status}`,
+    );
+  }
+  const saved = await getMissionDao().save({ ...mission, status: "COMPLETED" });
+  await record(missionCompleted(pilotId, saved));
+  return saved;
+}
+
+/**
+ * The mission's creator cancels it, moving it to CANCELLED. Mirrors
+ * `MissionService.cancel`.
+ *
+ * Allowed from any status that is not yet COMPLETED (and not already
+ * CANCELLED) — including AWARDED and IN_PROGRESS, which is exactly why the
+ * awarded pilot has to be told. Every outstanding bid is rejected so no pilot
+ * is left expecting to win: **PENDING *and* ACCEPTED**, the latter being the
+ * winner's own bid on a mission that was already awarded.
+ *
+ * ## Atomicity
+ * The cancellation and the bid rejections run in one `db.transaction` — the
+ * port of the source's `@Transactional`. A mission left CANCELLED while its
+ * accepted bid still reads ACCEPTED would tell the winning pilot they had
+ * won work that no longer exists, and that state is reachable if the second
+ * write fails. The cached mission copy is evicted twice, once by the write
+ * itself and once after the commit returns, which is what
+ * `CachingMissionDao`'s `afterCompletion` synchronisation does in Java (see
+ * `mission.cache.ts`); `bid.service.ts`'s `accept` follows the same pattern.
+ *
+ * KNOWN DIVERGENCE — the notification and the audit entry are raised *after*
+ * the transaction commits, where the source raises them inside it (its
+ * `NotificationService`/`AuditService` are not themselves transactional, so
+ * they join the caller's transaction). Observable only if one of those inserts
+ * fails: Spring would roll the cancellation back, this port keeps it and lets
+ * the error surface. Deliberate, and identical to the choice `accept`
+ * documents — the cancellation is the user's intent, its announcement a side
+ * effect, and un-cancelling a mission because a notification row would not
+ * insert is the worse failure. The email was always outside the transaction
+ * (`@Async` in the source, best-effort here).
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ * @throws MissionAccessDeniedError if the caller does not own it
+ * @throws MissionConflictError if it is already COMPLETED or CANCELLED
+ */
+export async function cancel(id: number, designerId: number): Promise<Mission> {
+  const mission = await getFreshOrThrow(id);
+  requireOwner(mission, designerId);
+  if (mission.status === "COMPLETED" || mission.status === "CANCELLED") {
+    throw new MissionConflictError(
+      `Mission ${id} cannot be cancelled from status ${mission.status}`,
+    );
+  }
+
+  const cancelled = await getDb().transaction(async (tx) => {
+    const saved = await getMissionDao().save({ ...mission, status: "CANCELLED" }, tx);
+    // Read every bid and filter in memory rather than querying the two
+    // statuses: the source's own shape, and it keeps the "outstanding" rule
+    // (PENDING *or* ACCEPTED) readable in one place next to the write.
+    const bids = await bidQueries.findByMissionOrderByCreatedAtDesc(mission.id, tx);
+    for (const bid of bids) {
+      if (bid.status === "PENDING" || bid.status === "ACCEPTED") {
+        // Sequential, not `Promise.all`: a transaction is one connection, and
+        // interleaving statements on it is not something the driver supports.
+        await bidQueries.save({ ...bid, status: "REJECTED" }, tx);
+      }
+    }
+    return saved;
+  });
+  // The commit has landed; drop anything a concurrent reader cached from the
+  // pre-cancellation row while the transaction was open.
+  getMissionDao().invalidate(mission.id);
+
+  // Only the awarded pilot is told, and only if there is one: everyone else
+  // holding a bid was still guessing, and the source notifies none of them
+  // (their bids are simply rejected).
+  const pilotId = mission.awardedPilotId;
+  if (pilotId !== null) {
+    // `mission.name` is nullable in this schema while both the notification
+    // copy and the mail port take a plain `string`; an unnamed mission renders
+    // as an empty slot inside the quotes, which is what Thymeleaf printed for
+    // a null too — the same substitution `bid.service.ts` already makes.
+    const target = { id: mission.id, name: mission.name ?? "" };
+    await createNotification(NewNotification.missionCancelled(pilotId, target));
+    // The non-throwing lookup, mirroring the source's `.ifPresent`: a
+    // cancellation that has already been written must not be undone by an
+    // absent mailbox.
+    const pilot = await findUserByIdOrUndefined(pilotId);
+    if (pilot !== undefined) {
+      await emailService.sendMissionCancelled(
+        { email: pilot.email, username: pilot.username },
+        { ...target, location: mission.location },
+      );
+    }
+  }
+  // One row per *intent*: the rejected bids are not audited, exactly as
+  // `AuditAction`'s javadoc spells out (see `missionCancelled` in `audit.ts`).
+  await record(missionCancelled(designerId, cancelled));
+  return cancelled;
+}
+
 /** Read-only lookup — may be served from cache, so never hand the result to `save()`. */
 async function getOrThrow(id: number): Promise<Mission> {
   const mission = await getMissionDao().findById(id);
@@ -298,5 +505,39 @@ function isVisibleTo(mission: Mission, currentUserId: number): boolean {
 function requireOwner(mission: Mission, currentUserId: number): void {
   if (currentUserId !== mission.userId) {
     throw new MissionAccessDeniedError(mission.id);
+  }
+}
+
+/**
+ * Only the pilot the mission was awarded to may drive its lifecycle. Mirrors
+ * the `!pilotId.equals(mission.getAwardedPilotId())` check that opens both
+ * `start` and `complete`.
+ *
+ * A mission with no awarded pilot fails this for everyone, which is the same
+ * outcome the source reaches (`equals` against a null id is false) — and it is
+ * why the suspension check below can safely dereference the pilot afterwards.
+ */
+function requireAwardedPilot(mission: Mission, pilotId: number): void {
+  if (pilotId !== mission.awardedPilotId) {
+    throw new MissionAccessDeniedError(mission.id);
+  }
+}
+
+/**
+ * The suspension guard `start` and `complete` share. The source reads the flag
+ * off the mission's loaded `@ManyToOne awardedPilot` relation; this port keeps
+ * only `awardedPilotId` on `Mission` (see `mission.types.ts`), so the account
+ * is fetched.
+ *
+ * The throwing lookup is safe and no ordering is observable: this runs only
+ * once `requireAwardedPilot` has established that the id is the caller's own,
+ * and that caller is an authenticated user whose row exists.
+ *
+ * @throws UserSuspendedError if the account is suspended
+ */
+async function requireUnsuspended(pilotId: number): Promise<void> {
+  const pilot = await findUserById(pilotId);
+  if (pilot.suspended) {
+    throw new UserSuspendedError();
   }
 }

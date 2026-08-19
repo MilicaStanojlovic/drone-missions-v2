@@ -32,7 +32,7 @@ import { BID_STATUS_COLORS, BID_STATUS_LABELS } from "../bid.types";
 
 /**
  * Angular's `| date: 'mediumDate'` ("Jun 15, 2015"). A local copy of the
- * helper `mission-list.tsx` keeps for the same pipe: both are private to their
+ * helper `mission-card.tsx` keeps for the same pipe: both are private to their
  * component, and neither feature should have to import the other's client
  * bundle for a date format.
  */

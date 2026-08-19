@@ -51,6 +51,8 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   const coreTag = `core-${runId}`;
   /** Scopes the flight-window cases to their own fixtures. */
   const edgeTag = `edge-${runId}`;
+  /** Scopes the awarded-pilot fixtures to their own cases. */
+  const jobsTag = `jobs-${runId}`;
 
   const insertedUserIds: number[] = [];
   const insertedMissionIds: number[] = [];
@@ -58,6 +60,8 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   let designerId: number;
   let suspendedDesignerId: number;
   let pilotId: number;
+  let otherPilotId: number;
+  let unawardedPilotId: number;
 
   let openPublishedId: number;
   let openBiddingId: number;
@@ -68,6 +72,9 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   let endsAtFromId: number;
   let insideDayId: number;
   let startsAtToId: number;
+  let awardedToPilotId: number;
+  let inProgressHiddenPilotId: number;
+  let awardedToOtherPilotId: number;
 
   async function insertUser(
     label: string,
@@ -104,6 +111,7 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
     status: MissionStatus;
     moderation?: "VISIBLE" | "HIDDEN";
     userId: number | null;
+    awardedPilotId?: number | null;
     location?: string | null;
     startTime?: Date | null;
     endTime?: Date | null;
@@ -117,6 +125,7 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
         status: values.status,
         moderation: values.moderation ?? "VISIBLE",
         userId: values.userId,
+        awardedPilotId: values.awardedPilotId ?? null,
         location: values.location ?? null,
         startTime: values.startTime ?? null,
         endTime: values.endTime ?? null,
@@ -181,6 +190,8 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
     designerId = await insertUser("designer", "DESIGNER");
     suspendedDesignerId = await insertUser("suspended", "DESIGNER", true);
     pilotId = await insertUser("pilot", "PILOT");
+    otherPilotId = await insertUser("other-pilot", "PILOT");
+    unawardedPilotId = await insertUser("unawarded-pilot", "PILOT");
 
     // Distinct, ordered creation timestamps so `ORDER BY created_at DESC` has
     // exactly one correct answer.
@@ -263,6 +274,35 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
       startTime: local(2026, 9, 2),
       endTime: local(2026, 9, 2, 2),
       createdAt: local(2026, 1, 1, 9),
+    });
+
+    // Awarded-pilot fixtures, on their own tag: none of them is in an open
+    // status, but the tag keeps them out of the feed cases regardless.
+    awardedToPilotId = await insertMission({
+      name: `awarded job ${runId}`,
+      description: `${jobsTag} won by our pilot`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: pilotId,
+      createdAt: local(2026, 1, 1, 10),
+    });
+    inProgressHiddenPilotId = await insertMission({
+      name: `hidden job ${runId}`,
+      description: `${jobsTag} hidden from the feed after being awarded`,
+      status: "IN_PROGRESS",
+      // Moderated out of the marketplace, but still this pilot's job.
+      moderation: "HIDDEN",
+      userId: designerId,
+      awardedPilotId: pilotId,
+      createdAt: local(2026, 1, 1, 11),
+    });
+    awardedToOtherPilotId = await insertMission({
+      name: `someone else's job ${runId}`,
+      description: `${jobsTag} won by a different pilot`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: otherPilotId,
+      createdAt: local(2026, 1, 1, 12),
     });
   });
 
@@ -402,6 +442,55 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
 
     it("returns nothing for a user who owns no missions", async () => {
       expect(await queries.findByUserId(pilotId)).toEqual([]);
+    });
+  });
+
+  describe("findByAwardedPilotId", () => {
+    it("returns every mission awarded to this pilot, whatever its status or moderation", async () => {
+      const found = await queries.findByAwardedPilotId(pilotId);
+      const ids = found.map((m) => m.id);
+
+      // Both of the pilot's jobs come back: the HIDDEN one included, because
+      // `findByAwardedPilot_Id` carries no moderation filter — HIDDEN only
+      // narrows the open feed, and a pilot keeps the job they won even after
+      // it has been moderated out of the marketplace.
+      expect(ids.sort()).toEqual([awardedToPilotId, inProgressHiddenPilotId].sort());
+      expect(found.find((m) => m.id === inProgressHiddenPilotId)?.moderation).toBe("HIDDEN");
+    });
+
+    it("scopes the listing to the awarded pilot", async () => {
+      const found = await queries.findByAwardedPilotId(pilotId);
+      const ids = found.map((m) => m.id);
+
+      // Another pilot's job, and the unawarded missions this designer owns,
+      // are all absent.
+      expect(ids).not.toContain(awardedToOtherPilotId);
+      expect(ids).not.toContain(openPublishedId);
+      expect(ids).not.toContain(draftId);
+    });
+
+    it("reads awarded_pilot_id, not user_id", async () => {
+      // The two listings answer different questions about the same person:
+      // the designer created these missions but was awarded none of them,
+      // while the pilot was awarded two and created none.
+      expect(await queries.findByAwardedPilotId(designerId)).toEqual([]);
+      expect(await queries.findByUserId(pilotId)).toEqual([]);
+
+      const designed = (await queries.findByUserId(designerId)).map((m) => m.id);
+      expect(designed).toEqual(expect.arrayContaining([awardedToPilotId]));
+    });
+
+    it("attaches the designer, not the pilot, to each row", async () => {
+      const found = await queries.findByAwardedPilotId(pilotId);
+
+      // The same LEFT designer join every other read uses: the pilot's
+      // my-jobs response still names who commissioned the mission.
+      expect(found[0]?.designer).toMatchObject({ id: designerId, username: "queries-designer" });
+      expect(found.every((m) => m.awardedPilotId === pilotId)).toBe(true);
+    });
+
+    it("returns nothing for a pilot who has been awarded no missions", async () => {
+      expect(await queries.findByAwardedPilotId(unawardedPilotId)).toEqual([]);
     });
   });
 

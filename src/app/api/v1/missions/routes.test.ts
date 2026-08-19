@@ -5,10 +5,11 @@ import type { User } from "@/features/users/user.types";
 import type { Mission } from "@/features/missions/mission.types";
 
 /**
- * Route-level suite for the phase-2 mission endpoints:
- * `POST /api/v1/missions`, `GET /api/v1/missions`,
- * `GET /api/v1/missions/my-missions`, and
- * `GET|PUT|DELETE /api/v1/missions/{id}`.
+ * Route-level suite for the mission endpoints: `POST /api/v1/missions`,
+ * `GET /api/v1/missions`, `GET /api/v1/missions/my-missions` and
+ * `GET|PUT|DELETE /api/v1/missions/{id}` from phase 2, plus the phase-5
+ * lifecycle trio `POST /api/v1/missions/{id}/{start,complete,cancel}` and the
+ * pilot listing `GET /api/v1/missions/my-jobs`.
  *
  * Mirrors `MissionControllerTest`, which is a Mockito unit test of the
  * controller rather than a live-database one: `MissionService` and
@@ -40,9 +41,13 @@ import type { Mission } from "@/features/missions/mission.types";
 const createMock = vi.fn();
 const findOpenMock = vi.fn();
 const findOwnedByMock = vi.fn();
+const findAwardedToMock = vi.fn();
 const findByIdMock = vi.fn();
 const updateMock = vi.fn();
 const deleteMissionMock = vi.fn();
+const startMock = vi.fn();
+const completeMock = vi.fn();
+const cancelMock = vi.fn();
 vi.mock("@/features/missions/mission.service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/missions/mission.service")>();
   return {
@@ -50,9 +55,13 @@ vi.mock("@/features/missions/mission.service", async (importOriginal) => {
     create: (...args: unknown[]) => createMock(...args),
     findOpen: (...args: unknown[]) => findOpenMock(...args),
     findOwnedBy: (...args: unknown[]) => findOwnedByMock(...args),
+    findAwardedTo: (...args: unknown[]) => findAwardedToMock(...args),
     findById: (...args: unknown[]) => findByIdMock(...args),
     update: (...args: unknown[]) => updateMock(...args),
     deleteMission: (...args: unknown[]) => deleteMissionMock(...args),
+    start: (...args: unknown[]) => startMock(...args),
+    complete: (...args: unknown[]) => completeMock(...args),
+    cancel: (...args: unknown[]) => cancelMock(...args),
   };
 });
 
@@ -71,14 +80,21 @@ vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
 // mocked service/rating modules.
 import {
   MissionAccessDeniedError,
+  MissionConflictError,
   MissionNotFoundError,
 } from "@/features/missions/mission.service";
+import { UserSuspendedError } from "@/features/users/user.service";
 import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
 import { GET as feedRoute, POST as createRoute } from "./route";
 import { GET as myMissionsRoute } from "./my-missions/route";
+import { GET as myJobsRoute } from "./my-jobs/route";
 import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
+import { POST as startRoute } from "./[id]/start/route";
+import { POST as completeRoute } from "./[id]/complete/route";
+import { POST as cancelRoute } from "./[id]/cancel/route";
 
 const DESIGNER_ID = 7;
+const PILOT_ID = 42;
 
 /** The context Next.js hands a non-dynamic route handler. */
 const listContext = { params: Promise.resolve({}) };
@@ -689,5 +705,387 @@ describe("DELETE /api/v1/missions/{id}", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+});
+
+/**
+ * The lifecycle POSTs as the client sends them: path plus token, no body at
+ * all — the source's `start`/`complete`/`cancel` take only `@PathVariable id`
+ * and `@AuthenticationPrincipal userId`.
+ */
+function actionRequest(url: string, userId: number, role: UserRole): Request {
+  return new Request(url, { method: "POST", headers: authHeaders(userId, role) });
+}
+
+/** The mission as it looks once a bid has been accepted on it. */
+function awardedMission(overrides: Partial<Mission> = {}): Mission {
+  return ownedMission({ status: "AWARDED", awardedPilotId: PILOT_ID, ...overrides });
+}
+
+describe("POST /api/v1/missions/{id}/start", () => {
+  it("moves the mission to IN_PROGRESS and answers 200 with the MissionResponse", async () => {
+    startMock.mockResolvedValue(awardedMission({ status: "IN_PROGRESS" }));
+
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      id: 1,
+      status: "IN_PROGRESS",
+      awardedPilotId: PILOT_ID,
+      designerName: "dana",
+    });
+  });
+
+  it("hands the service the mission id and the acting pilot from the token", async () => {
+    startMock.mockResolvedValue(awardedMission({ status: "IN_PROGRESS" }));
+
+    await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start?userId=99", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+
+    // Never the query string: the transition is attributed to the verified caller.
+    expect(startMock).toHaveBeenCalledWith(1, PILOT_ID);
+  });
+
+  it("rejects a designer with 403 and starts nothing (hasRole('PILOT'))", async () => {
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    // The mirror image of `/cancel`: the mission's own designer may not start it.
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: "You do not have permission to perform this action",
+    });
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an admin too — hasRole('PILOT') is a single exact role", async () => {
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", 1, "ADMIN"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 with the mission's message when the caller is not the awarded pilot", async () => {
+    startMock.mockRejectedValue(new MissionAccessDeniedError(1));
+
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", 99, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: "You are not allowed to modify mission 1",
+    });
+  });
+
+  it("answers 403 while the awarded pilot's account is suspended", async () => {
+    startMock.mockRejectedValue(new UserSuspendedError());
+
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.message).toBe("This account is suspended and cannot perform this action");
+  });
+
+  it("answers 409 naming the status a mission cannot be started from", async () => {
+    startMock.mockRejectedValue(
+      new MissionConflictError("Mission 1 cannot be started from status PUBLISHED"),
+    );
+
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/1/start", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      status: "CONFLICT",
+      message: "Mission 1 cannot be started from status PUBLISHED",
+    });
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    startMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/9/start", PILOT_ID, "PILOT"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-numeric id with 400 and starts nothing", async () => {
+    const response = await startRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/start", PILOT_ID, "PILOT"),
+      idContext("abc"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.data).toMatchObject({ id: "must be a number" });
+    expect(startMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/v1/missions/{id}/complete", () => {
+  it("moves the mission to COMPLETED and answers 200 with the MissionResponse", async () => {
+    completeMock.mockResolvedValue(awardedMission({ status: "COMPLETED" }));
+
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/complete", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ id: 1, status: "COMPLETED", awardedPilotId: PILOT_ID });
+    expect(completeMock).toHaveBeenCalledWith(1, PILOT_ID);
+  });
+
+  it("rejects a designer with 403 and completes nothing (hasRole('PILOT'))", async () => {
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/complete", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(completeMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 when the caller is not the awarded pilot", async () => {
+    completeMock.mockRejectedValue(new MissionAccessDeniedError(1));
+
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/complete", 99, "PILOT"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).message).toBe("You are not allowed to modify mission 1");
+  });
+
+  it("answers 409 naming the status a mission cannot be completed from", async () => {
+    // A mission that was awarded but never started, and equally the message a
+    // second completion attempt gets — the guard demands IN_PROGRESS.
+    completeMock.mockRejectedValue(
+      new MissionConflictError("Mission 1 cannot be completed from status AWARDED"),
+    );
+
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/1/complete", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.message).toBe("Mission 1 cannot be completed from status AWARDED");
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    completeMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/9/complete", PILOT_ID, "PILOT"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-numeric id with 400 and completes nothing", async () => {
+    const response = await completeRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/complete", PILOT_ID, "PILOT"),
+      idContext("abc"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(completeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/v1/missions/{id}/cancel", () => {
+  it("cancels the owner's mission and answers 200 with the MissionResponse alone", async () => {
+    cancelMock.mockResolvedValue(awardedMission({ status: "CANCELLED" }));
+
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/1/cancel", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ id: 1, status: "CANCELLED", userId: DESIGNER_ID });
+    // The bids the service also rejected are not part of the response: the
+    // source returns a single `MissionResponse`.
+    expect(Array.isArray(body)).toBe(false);
+    expect(body).not.toHaveProperty("bids");
+    expect(cancelMock).toHaveBeenCalledWith(1, DESIGNER_ID);
+  });
+
+  it("rejects a pilot with 403 and cancels nothing (hasRole('DESIGNER'))", async () => {
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/1/cancel", PILOT_ID, "PILOT"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    // Not even the awarded pilot may cancel — only the mission's creator.
+    expect(response.status).toBe(403);
+    expect(body.message).toBe("You do not have permission to perform this action");
+    expect(cancelMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an admin too — hasRole('DESIGNER') is a single exact role", async () => {
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/1/cancel", 1, "ADMIN"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(cancelMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 when a designer cancels someone else's mission", async () => {
+    cancelMock.mockRejectedValue(new MissionAccessDeniedError(1));
+
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/1/cancel", 99, "DESIGNER"),
+      idContext("1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).message).toBe("You are not allowed to modify mission 1");
+  });
+
+  it("answers 409 naming the status a mission cannot be cancelled from", async () => {
+    cancelMock.mockRejectedValue(
+      new MissionConflictError("Mission 1 cannot be cancelled from status COMPLETED"),
+    );
+
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/1/cancel", DESIGNER_ID, "DESIGNER"),
+      idContext("1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      status: "CONFLICT",
+      message: "Mission 1 cannot be cancelled from status COMPLETED",
+    });
+  });
+
+  it("answers 404 for a mission that does not exist", async () => {
+    cancelMock.mockRejectedValue(new MissionNotFoundError(9));
+
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/9/cancel", DESIGNER_ID, "DESIGNER"),
+      idContext("9"),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-numeric id with 400 and cancels nothing", async () => {
+    const response = await cancelRoute(
+      actionRequest("http://localhost/api/v1/missions/abc/cancel", DESIGNER_ID, "DESIGNER"),
+      idContext("abc"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(cancelMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/v1/missions/my-jobs", () => {
+  it("returns the missions awarded to the calling pilot", async () => {
+    findAwardedToMock.mockResolvedValue([awardedMission()]);
+
+    const response = await myJobsRoute(
+      getRequest("http://localhost/api/v1/missions/my-jobs", PILOT_ID, "PILOT"),
+      listContext,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({
+      id: 1,
+      status: "AWARDED",
+      awardedPilotId: PILOT_ID,
+      designerName: "dana",
+    });
+    expect(findAwardedToMock).toHaveBeenCalledWith(PILOT_ID);
+  });
+
+  it("takes the pilot id from the verified token headers, never from the query string", async () => {
+    findAwardedToMock.mockResolvedValue([]);
+
+    await myJobsRoute(
+      getRequest("http://localhost/api/v1/missions/my-jobs?userId=99", PILOT_ID, "PILOT"),
+      listContext,
+    );
+
+    expect(findAwardedToMock).toHaveBeenCalledWith(PILOT_ID);
+  });
+
+  it("rejects a designer with 403 (hasRole('PILOT')), unlike my-missions", async () => {
+    const response = await myJobsRoute(
+      getRequest("http://localhost/api/v1/missions/my-jobs", DESIGNER_ID, "DESIGNER"),
+      listContext,
+    );
+    const body = await response.json();
+
+    // The source guards this endpoint with hasRole('PILOT') while
+    // `/my-missions` is only isAuthenticated() — a designer gets a 403 here
+    // where they get an empty list there. Mirrored, not smoothed over.
+    expect(response.status).toBe(403);
+    expect(body.message).toBe("You do not have permission to perform this action");
+    expect(findAwardedToMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an admin too", async () => {
+    const response = await myJobsRoute(
+      getRequest("http://localhost/api/v1/missions/my-jobs", 1, "ADMIN"),
+      listContext,
+    );
+
+    expect(response.status).toBe(403);
+    expect(findAwardedToMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the empty list for a pilot with no jobs — never a 404", async () => {
+    findAwardedToMock.mockResolvedValue([]);
+
+    const response = await myJobsRoute(
+      getRequest("http://localhost/api/v1/missions/my-jobs", PILOT_ID, "PILOT"),
+      listContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
   });
 });
