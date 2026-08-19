@@ -31,7 +31,9 @@
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
     "pino": "^9",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.9"
   },
   "devDependencies": {
     "typescript": "^5",

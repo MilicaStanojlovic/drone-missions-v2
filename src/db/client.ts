@@ -73,3 +73,19 @@ export function getDb(): Database {
   }
   return globalForDb.__droneMissionsDb;
 }
+
+/**
+ * Closes the underlying `postgres.js` pool and clears the cached singleton.
+ * No Spring/Next.js runtime ever calls this (the pool lives for the life of
+ * the process, same as HikariCP) — it exists only for live-DB Vitest suites
+ * (e.g. `src/lib/audit.test.ts`), which open a real connection and must
+ * release it in an `afterAll` so the test process can exit instead of
+ * hanging on an open socket. A no-op if no pool was ever created.
+ */
+export async function closeDb(): Promise<void> {
+  if (globalForDb.__droneMissionsSql) {
+    await globalForDb.__droneMissionsSql.end();
+    globalForDb.__droneMissionsSql = undefined;
+    globalForDb.__droneMissionsDb = undefined;
+  }
+}
