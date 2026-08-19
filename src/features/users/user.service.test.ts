@@ -100,6 +100,7 @@ const daoMock = {
   findByAwardedPilotId: vi.fn(),
   findOverdue: vi.fn(),
   searchAll: vi.fn(),
+  countByStatus: vi.fn(),
   invalidateLists: vi.fn(),
   invalidate: vi.fn(),
   save: vi.fn(),

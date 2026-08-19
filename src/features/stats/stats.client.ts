@@ -1,26 +1,29 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
-import type { MissionStatus, UserRole } from "@/db/schema";
+import type { PlatformStats } from "./stats.types";
 
 /**
  * Client-side platform-stats access: the one snapshot call the admin overview
  * makes. Ports `services/platform-stats.service.ts` and `models/stats.model.ts`.
  *
- * Only the browser half lives here. The server half — `stats.queries.ts`,
+ * Only the browser half lives here. The server half — `stats.types.ts`,
  * `stats.service.ts` and the `GET /api/v1/platform-stats` route behind it — is
  * Phase 9's ("Platform stats dashboard", which depends on every data vertical,
- * see MIGRATION_PLAN.md §7). Until that lands, `fetchPlatformStats` reaches a
- * route that does not exist yet and rejects, which the overview renders as its
- * (ported) error state; nothing else in the app calls it. The types below are
- * transcribed from the backend DTO rather than derived from a local one for
- * the same reason — there is no server-side `PlatformStats` in this repo yet,
- * and Phase 9 should be able to type its response against this shape instead
- * of inventing a second one.
+ * see MIGRATION_PLAN.md §7).
  *
- * `import type` for `MissionStatus`/`UserRole` is erased at compile time, so
- * this stays free of any runtime import of `@/db/schema` (which pulls in
- * `drizzle-orm/pg-core`) — the same technique `auth.client.ts` and
- * `mission.client.ts` use.
+ * The snapshot shape itself is no longer written down here: it was, while this
+ * file was the only place in the repo that knew it, and Phase 9 moved that one
+ * declaration server-side to `stats.types.ts` (beside the service that builds
+ * it, as `RatingSummary` sits beside its queries) and re-exports it below.
+ * That is the direction every other feature runs — `audit.client.ts` derives
+ * `AuditLogEntry` from `audit.types.ts` the same way — and it leaves the API
+ * response and the component that renders it typed by a single interface with
+ * nothing to drift.
+ *
+ * `import type` is erased at compile time, so re-exporting from a
+ * `server-only` module (and from `@/db/schema`, which pulls in
+ * `drizzle-orm/pg-core`) emits no runtime import — the same technique
+ * `auth.client.ts`, `mission.client.ts` and `audit.client.ts` use.
  *
  * SOURCE:
  * - drone-missions-frontend/.../services/platform-stats.service.ts
@@ -29,29 +32,14 @@ import type { MissionStatus, UserRole } from "@/db/schema";
  * - drone-missions-backend/.../web/controller/stats/PlatformStatsController.java
  */
 
-/** One bar of the bids-per-mission chart — mission name only, never an id. */
-export interface TopMission {
-  name: string;
-  bids: number;
-}
-
 /**
- * Platform-wide snapshot counts, as `GET /api/v1/platform-stats` returns them.
- *
- * Both maps arrive zero-filled with every status/role, which is what lets the
- * overview index them without a fallback — `Record`, not `Partial<Record>`,
- * exactly as the Angular model declares them. `bidAmountTotal` is the
- * backend's `BigDecimal`, which Jackson writes as a JSON number.
+ * The wire shape of `GET /api/v1/platform-stats`, and one bar of its
+ * bids-per-mission chart. Identical to what the service returns — the source's
+ * `PlatformStatsMapper` copies its record across field for field — so the
+ * response is typed by the server declaration rather than a transcription of
+ * it. Mirrors the Angular `stats.model.ts` pair.
  */
-export interface PlatformStats {
-  missionsByStatus: Record<MissionStatus, number>;
-  activePilots: number;
-  bidCount: number;
-  bidAmountTotal: number;
-  suspendedUsers: number;
-  usersByRole: Record<UserRole, number>;
-  topMissionsByBids: TopMission[];
-}
+export type { PlatformStats, TopMission } from "./stats.types";
 
 /** One snapshot of the platform counts (admin-only endpoint). Ports `getOverview`. */
 export async function fetchPlatformStats(): Promise<PlatformStats> {

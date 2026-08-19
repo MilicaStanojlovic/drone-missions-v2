@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
-import { users } from "@/db/schema";
+import { USER_ROLES, users } from "@/db/schema";
 import type { UserRole } from "@/db/schema";
 import * as queries from "./user.queries";
 import { UserNotFoundError } from "./user.queries";
@@ -50,7 +50,7 @@ import { UserNotFoundError } from "./user.queries";
  * the source rule it pins instead.
  *
  * SOURCE (the behaviour under test, not a test to mirror):
- * - drone-missions-backend/.../data/repository/UserRepository.java (`search`, `findByEmail`, `existsByEmail`)
+ * - drone-missions-backend/.../data/repository/UserRepository.java (`search`, `findByEmail`, `existsByEmail`, the three admin-overview counts)
  * - drone-missions-backend/.../business/service/user/UserService.java (`findById`, the `repository.save` in `suspend`/`reactivate`)
  */
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -229,9 +229,9 @@ describe.runIf(hasDb)("user.queries.ts (live DB)", () => {
 
       const reactivated = await queries.setSuspended(designerA, false);
       expect(reactivated.suspended).toBe(false);
-      expect(
-        (await getDb().select().from(users).where(eq(users.id, designerA)))[0].suspended,
-      ).toBe(false);
+      expect((await getDb().select().from(users).where(eq(users.id, designerA)))[0].suspended).toBe(
+        false,
+      );
     });
 
     it("touches no other account", async () => {
@@ -268,6 +268,232 @@ describe.runIf(hasDb)("user.queries.ts (live DB)", () => {
       expect((await queries.findByEmail(email))?.id).toBe(adminA);
       expect(await queries.existsByEmail(email)).toBe(true);
       expect(await queries.existsByEmail(`nobody-${runId}@example.com`)).toBe(false);
+    });
+  });
+
+  /**
+   * The three admin-overview aggregates: `countByRoleAndSuspendedFalse`,
+   * `countBySuspendedTrue` and `countByRole`.
+   *
+   * None of them takes a filter — they are *platform* figures by definition —
+   * so the far-future `created_at` trick that scopes the listing cases above
+   * cannot scope these: they summarise every account in the database,
+   * including the ones a concurrently running live suite is holding and about
+   * to delete. A floor ("at least this suite's own fixtures") is the shape
+   * `bid.queries.test.ts` uses for the same problem in `volume()`, but a floor
+   * alone cannot show *exclusion* — an aggregate that forgot its `suspended`
+   * predicate entirely would sail past one.
+   *
+   * So each case reads the aggregate sandwiched between two full snapshots of
+   * `users` (`readAgainstOracle` below) and compares it to an oracle computed
+   * in JS from the raw rows — deliberately not by a second SQL aggregate, so
+   * the oracle cannot pass by reproducing the bug under test. When the two
+   * snapshots agree, nothing else wrote while the aggregate ran and the
+   * comparison is asserted as exact *equality*; when they disagree the case
+   * falls back to the floor over this suite's own rows, which stays true
+   * whatever the rest of the database did. In practice (a local/CI database,
+   * one suite at a time on the `users` table) the exact branch is the one that
+   * runs.
+   *
+   * SOURCE (the behaviour under test, not a test to mirror):
+   * - drone-missions-backend/.../data/repository/UserRepository.java (lines 26–39)
+   */
+  describe("the platform aggregates", () => {
+    /** One account as an aggregate sees it — role and suspension, nothing else. */
+    type Row = { id: number; role: UserRole; suspended: boolean };
+
+    /** A PILOT that is not suspended: the "active pilots" tile must count it. */
+    let activePilot: number;
+    /** A PILOT that is: the same tile must not. */
+    let suspendedPilot: number;
+    /** Suspended accounts of the other two roles — the "spans every role" case. */
+    let suspendedDesigner: number;
+    let suspendedAdmin: number;
+
+    /**
+     * Inserts an aggregate fixture at the *current* time on purpose: the five
+     * accounts the suite-wide `insertUser` helper creates carry a far-future
+     * `created_at`, and the ordering/paging cases above assert that those five
+     * — and only those five — sit at the head of every listing. A sixth
+     * far-future account would break them. These rows have no ordering to
+     * pin, only a role and a flag to be counted, so a normal timestamp costs
+     * nothing and keeps that guarantee intact.
+     */
+    async function insertAggregateUser(
+      label: string,
+      role: UserRole,
+      suspended: boolean,
+    ): Promise<number> {
+      const now = new Date();
+      const [row] = await getDb()
+        .insert(users)
+        .values({
+          username: `user-queries-${label}`,
+          email: `user-queries-${runId}-${label}@example.com`,
+          passwordHash: "not-a-real-hash",
+          role,
+          suspended,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: users.id });
+      insertedUserIds.push(row.id);
+      return row.id;
+    }
+
+    /** Every account in the database, as raw rows for the JS-side oracle. */
+    async function snapshot(): Promise<Row[]> {
+      return getDb()
+        .select({ id: users.id, role: users.role, suspended: users.suspended })
+        .from(users);
+    }
+
+    /** Order-independent identity of a snapshot: did the table stand still? */
+    function signature(rows: Row[]): string {
+      return rows
+        .map((row) => `${row.id}:${row.role}:${row.suspended}`)
+        .sort()
+        .join("|");
+    }
+
+    /**
+     * Runs one aggregate between two snapshots and hands the case the value,
+     * the rows to compute its oracle from, and whether the database was quiet
+     * while it ran (see the block header).
+     */
+    async function readAgainstOracle<T>(
+      read: () => Promise<T>,
+    ): Promise<{ value: T; rows: Row[]; quiet: boolean }> {
+      const before = await snapshot();
+      const value = await read();
+      const after = await snapshot();
+      return { value, rows: before, quiet: signature(before) === signature(after) };
+    }
+
+    /** This suite's own rows out of a snapshot — never written by anyone else. */
+    function ourRows(rows: Row[]): Row[] {
+      const ours = new Set(insertedUserIds);
+      return rows.filter((row) => ours.has(row.id));
+    }
+
+    beforeAll(async () => {
+      activePilot = await insertAggregateUser("agg-active-pilot", "PILOT", false);
+      suspendedPilot = await insertAggregateUser("agg-suspended-pilot", "PILOT", true);
+      suspendedDesigner = await insertAggregateUser("agg-suspended-designer", "DESIGNER", true);
+      suspendedAdmin = await insertAggregateUser("agg-suspended-admin", "ADMIN", true);
+    });
+
+    describe("countByRoleAndSuspendedFalse", () => {
+      it("counts one role's accounts and leaves the suspended ones out", async () => {
+        const { value, rows, quiet } = await readAgainstOracle(() =>
+          queries.countByRoleAndSuspendedFalse("PILOT"),
+        );
+        const oracle = rows.filter((row) => row.role === "PILOT" && !row.suspended).length;
+        const mine = ourRows(rows);
+
+        // The fixture is what gives the case its teeth: both a countable and
+        // an uncountable pilot exist, so a query missing either half of
+        // `role = :role and suspended = false` lands on a different number.
+        expect(mine.find((row) => row.id === activePilot)?.suspended).toBe(false);
+        expect(mine.find((row) => row.id === suspendedPilot)?.suspended).toBe(true);
+
+        if (quiet) {
+          expect(value).toBe(oracle);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(
+            mine.filter((row) => row.role === "PILOT" && !row.suspended).length,
+          );
+        }
+        expect(typeof value).toBe("number");
+      });
+
+      it("counts the role it was asked for, not every unsuspended account", async () => {
+        const { value, rows, quiet } = await readAgainstOracle(() =>
+          queries.countByRoleAndSuspendedFalse("ADMIN"),
+        );
+        const oracle = rows.filter((row) => row.role === "ADMIN" && !row.suspended).length;
+
+        // A suspended account of *another* role is excluded by the role
+        // predicate rather than quietly counted here — which is what keeps
+        // this reading and `countBySuspendedTrue` independent.
+        if (quiet) {
+          expect(value).toBe(oracle);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(1);
+        }
+        expect(value).toBeLessThan(rows.length);
+      });
+    });
+
+    describe("countBySuspendedTrue", () => {
+      it("counts suspended accounts across every role", async () => {
+        const { value, rows, quiet } = await readAgainstOracle(() =>
+          queries.countBySuspendedTrue(),
+        );
+        const oracle = rows.filter((row) => row.suspended).length;
+        const mine = ourRows(rows);
+        const mineSuspended = mine.filter((row) => row.suspended);
+
+        // The javadoc's "across every role" in fixture form: this suite alone
+        // holds a suspended account of each of the three roles, so a query
+        // that had picked up a role predicate could not reach this number.
+        expect(new Set(mineSuspended.map((row) => row.role))).toEqual(
+          new Set<UserRole>(["PILOT", "DESIGNER", "ADMIN"]),
+        );
+        expect(mineSuspended.map((row) => row.id)).toEqual(
+          expect.arrayContaining([suspendedPilot, suspendedDesigner, suspendedAdmin]),
+        );
+
+        if (quiet) {
+          expect(value).toBe(oracle);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(mineSuspended.length);
+        }
+        expect(typeof value).toBe("number");
+      });
+    });
+
+    describe("countByRole", () => {
+      it("groups every account by its role, suspended accounts included", async () => {
+        const { value, rows, quiet } = await readAgainstOracle(() => queries.countByRole());
+        const byRole = new Map(value.map((row) => [row.role, row.total]));
+
+        // One row per role, never two — `group by u.role`.
+        expect(byRole.size).toBe(value.length);
+        expect(value.length).toBeLessThanOrEqual(USER_ROLES.length);
+        expect(value.every((row) => USER_ROLES.includes(row.role))).toBe(true);
+        expect(value.every((row) => typeof row.total === "number")).toBe(true);
+
+        if (quiet) {
+          for (const role of USER_ROLES) {
+            const oracle = rows.filter((row) => row.role === role).length;
+            // Suspension is not filtered: a suspended pilot still belongs to
+            // PILOT's bar. The suspended total is the separate reading above.
+            expect(byRole.get(role) ?? 0).toBe(oracle);
+          }
+          expect(value.reduce((sum, row) => sum + row.total, 0)).toBe(rows.length);
+        } else {
+          const mine = ourRows(rows);
+          for (const role of USER_ROLES) {
+            expect(byRole.get(role) ?? 0).toBeGreaterThanOrEqual(
+              mine.filter((row) => row.role === role).length,
+            );
+          }
+        }
+      });
+
+      it("is sparse — a role produces a row only when accounts hold it", async () => {
+        const counted = await queries.countByRole();
+
+        // The observable half of sparseness on a shared table, where all three
+        // roles always exist: no row is ever a zero. A role nobody holds
+        // produces no group at all and is simply absent, which is why
+        // zero-filling over `USER_ROLES` is the stats service's job (source:
+        // `PlatformStatsService` seeds the map before folding these rows in)
+        // and not this query's.
+        expect(counted.length).toBeGreaterThan(0);
+        expect(counted.every((row) => row.total > 0)).toBe(true);
+      });
     });
   });
 });

@@ -23,14 +23,11 @@ import { fetchPlatformStats, type PlatformStats, type TopMission } from "../stat
  * expressions here: they are pure functions of `stats`, which changes exactly
  * once, so there is nothing to memoize.
  *
- * NOTE — the endpoint behind this page is Phase 9's. `GET /platform-stats` is
- * the one admin endpoint Phase 7 does not port (MIGRATION_PLAN.md §7 puts it
- * in "Phase 9 — Platform stats dashboard", which depends on every data
- * vertical, ratings included). Until Phase 9 adds the route, the fetch 404s
- * and this renders the source's own error branch — the page, its guard, its
- * nav entry and its markup are in place, and Phase 9 has only a server side
- * left to build. Nothing here is stubbed against fabricated numbers: an admin
- * sees "couldn't load", never invented stats.
+ * The endpoint behind this page landed in Phase 9 —
+ * `src/app/api/v1/platform-stats/route.ts` over `src/features/stats/stats.service.ts`.
+ * The error branch stays the honest fallback it always was: nothing here is
+ * stubbed against fabricated numbers, so an admin whose fetch fails sees
+ * "couldn't load", never invented stats.
  *
  * Loading follows the repo's established shape (`my-jobs-list.tsx`): a
  * `cancelled` flag so a resolve after unmount cannot set state, and

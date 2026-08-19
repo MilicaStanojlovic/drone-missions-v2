@@ -86,12 +86,10 @@ import type { Geofence, Mission, MissionWrite, Waypoint } from "./mission.types"
  * implemented both by the plain query module and by the decorator below, which
  * is what lets the cache be swapped in without a single call site changing.
  *
- * The methods the source declares but this port does not yet have queries for
- * (`countByStatus`) are absent rather than stubbed; the phase that adds that
- * query adds it here too. It is an *uncached* pass-through in the source, so
- * nothing about the caching semantics is deferred with it — as is true of
- * `findOverdue` (Phase 8) and `searchAll` (Phase 7), both present below in
- * exactly that form.
+ * Every method the source declares is now present: `countByStatus` (Phase 9)
+ * was the last one still absent rather than stubbed, and it joins `findOverdue`
+ * (Phase 8) and `searchAll` (Phase 7) as an *uncached* pass-through — the form
+ * the source gives all three.
  *
  * `findByAwardedPilotId` is not in that group and never was: the source
  * caches it, under its own `OwnerKey("byPilot", …)`, exactly as it caches
@@ -120,6 +118,12 @@ export interface MissionDao {
    * `%…%` pattern. Deliberately *not* cached (see the implementation below).
    */
   searchAll(pattern: string | null, request: PageRequest): Promise<Page<Mission>>;
+  /**
+   * Mission counts grouped by status — sparse: statuses with no rows are
+   * absent, not zero. No moderation filter, so the stats agree with the admin
+   * listing (admins see everything). Admin flows only, and never cached.
+   */
+  countByStatus(): Promise<Partial<Record<MissionStatus, number>>>;
   /**
    * Drop every cached list. For moderation events that change feed membership
    * without a mission write — suspending a designer hides their missions, but
@@ -372,6 +376,19 @@ export class CachingMissionDao implements MissionDao {
   }
 
   /**
+   * Not cached: a rare admin-only stats view is not worth widening the
+   * invalidation surface. The source says exactly that, and here the argument
+   * is if anything stronger — the caches hold missions and id lists, so a
+   * status→count map has nowhere to live in either of them and caching it
+   * would mean a third cache with an invalidation rule of its own, for a
+   * dashboard load. Straight to the delegate, so the tiles are always counted
+   * against the current table rather than a copy a write forgot to clear.
+   */
+  async countByStatus(): Promise<Partial<Record<MissionStatus, number>>> {
+    return this.delegate.countByStatus();
+  }
+
+  /**
    * Feed membership changed without a mission write (a designer was suspended
    * or reactivated). Only the id arrays go; the entity rows are still correct.
    */
@@ -502,6 +519,7 @@ const uncachedMissionDao: MissionDao = {
   findByAwardedPilotId: queries.findByAwardedPilotId,
   findOverdue: queries.findOverdue,
   searchAll: queries.searchAll,
+  countByStatus: queries.countByStatus,
   invalidateLists: () => {},
   invalidate: () => {},
   save: queries.save,
