@@ -34,6 +34,18 @@ if (localEnv.DATABASE_URL && !process.env.DATABASE_URL) {
   process.env.DATABASE_URL = localEnv.DATABASE_URL;
 }
 
+/**
+ * The port the app under test is served on. `next dev` binds `PORT` from the
+ * environment or from `.env.local` (which it loads itself), so a checkout
+ * that sets `PORT` — e.g. the Phase 4 worktree, which runs on `3001` so it
+ * can sit alongside the main checkout on `3000` — would otherwise serve the
+ * app on one port while Playwright waited on, and drove, another. Resolved
+ * from the same two sources here, defaulting to Next's own default, and then
+ * forwarded explicitly to the spawned server so both sides always agree.
+ */
+const PORT = process.env.PORT ?? localEnv.PORT ?? "3000";
+const BASE_URL = `http://localhost:${PORT}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -42,7 +54,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: BASE_URL,
     trace: "on-first-retry",
   },
   projects: [
@@ -53,7 +65,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "pnpm dev",
-    url: "http://localhost:3000",
+    url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
@@ -68,6 +80,10 @@ export default defineConfig({
       // 1's e2e/auth.spec.ts live-DB suite just skips itself when it's
       // unset, exactly like the Vitest live-DB suites do.
       JWT_SECRET: process.env.JWT_SECRET ?? E2E_JWT_SECRET,
+      // Keeps the server's bind port and `BASE_URL` in lockstep even when
+      // `PORT` came from `process.env` rather than the `.env.local` that
+      // `next dev` reads on its own (see the `PORT` note above).
+      PORT,
     },
   },
 });

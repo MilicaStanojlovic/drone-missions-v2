@@ -59,6 +59,73 @@ describe("env.ts", () => {
       const result = loadEnv(BASE_ENV);
       expect(result.RESEND_API_KEY).toBeUndefined();
     });
+
+    it('defaults MAIL_REDIRECT_TO to "" (= normal delivery, mirrors app.mail.redirect-to:)', () => {
+      const result = loadEnv(BASE_ENV);
+      expect(result.MAIL_REDIRECT_TO).toBe("");
+    });
+
+    it("defaults APP_URL to http://localhost:8085 (localhost on the PORT default)", () => {
+      const result = loadEnv(BASE_ENV);
+      expect(result.APP_URL).toBe("http://localhost:8085");
+      // The two defaults describe the same origin: a copied .env.example must
+      // not serve on one port and link emails at another.
+      expect(result.APP_URL).toBe(`http://localhost:${result.PORT}`);
+    });
+  });
+
+  describe("MAIL_REDIRECT_TO", () => {
+    it("keeps a configured redirect address", () => {
+      const result = loadEnv({ ...BASE_ENV, MAIL_REDIRECT_TO: "dev@example.com" });
+      expect(result.MAIL_REDIRECT_TO).toBe("dev@example.com");
+    });
+
+    it("accepts an explicitly empty value instead of rejecting it (blank = normal delivery)", () => {
+      const result = loadEnv({ ...BASE_ENV, MAIL_REDIRECT_TO: "" });
+      expect(result.MAIL_REDIRECT_TO).toBe("");
+    });
+
+    it('normalizes a whitespace-only value to "" (mirrors Spring\'s isBlank check)', () => {
+      const result = loadEnv({ ...BASE_ENV, MAIL_REDIRECT_TO: "   " });
+      expect(result.MAIL_REDIRECT_TO).toBe("");
+    });
+
+    it("trims surrounding whitespace off a real address", () => {
+      const result = loadEnv({ ...BASE_ENV, MAIL_REDIRECT_TO: "  dev@example.com  " });
+      expect(result.MAIL_REDIRECT_TO).toBe("dev@example.com");
+    });
+  });
+
+  describe("APP_URL", () => {
+    it("accepts an absolute https origin", () => {
+      const result = loadEnv({ ...BASE_ENV, APP_URL: "https://dronemissions.example.com" });
+      expect(result.APP_URL).toBe("https://dronemissions.example.com");
+    });
+
+    it("strips a trailing slash so CTA links never double up", () => {
+      const result = loadEnv({ ...BASE_ENV, APP_URL: "https://dronemissions.example.com/" });
+      expect(result.APP_URL).toBe("https://dronemissions.example.com");
+      expect(`${result.APP_URL}/missions/7`).toBe("https://dronemissions.example.com/missions/7");
+    });
+
+    it("rejects a non-URL value", () => {
+      expect(() => loadEnv({ ...BASE_ENV, APP_URL: "not a url" })).toThrow(/APP_URL/);
+    });
+
+    it('rejects a scheme-less "localhost:8085", which bare URL parsing would accept', () => {
+      // WHATWG URL parsing reads "localhost:" as the scheme, so this is a
+      // structurally valid URL — it just isn't a usable origin for an email
+      // link. The protocol constraint is what catches it.
+      expect(() => loadEnv({ ...BASE_ENV, APP_URL: "localhost:8085" })).toThrow(/APP_URL/);
+    });
+
+    it("rejects a non-http(s) scheme", () => {
+      expect(() => loadEnv({ ...BASE_ENV, APP_URL: "ftp://example.com" })).toThrow(/APP_URL/);
+    });
+
+    it("rejects an empty APP_URL", () => {
+      expect(() => loadEnv({ ...BASE_ENV, APP_URL: "" })).toThrow(/APP_URL/);
+    });
   });
 
   describe("DATABASE_URL / FLYWAY_URL optional at parse time", () => {
