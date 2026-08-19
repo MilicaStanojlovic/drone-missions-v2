@@ -15,18 +15,20 @@ import {
  * `record()` is the direct port of `AuditService.record`: callers invoke it
  * as the last statement after their domain save succeeds — a failed
  * operation never logs, and a failed insert propagates (an audit trail that
- * can be silently skipped is not one). This module only ships the two
- * factories Phase 1 needs (`userRegistered`/`userLoggedIn`, both
- * self-actored — the acting user is also the target); every other
- * `NewAuditEntry` factory (mission/bid/rating/admin actions) is added by the
- * phase that introduces the mutation it records.
+ * can be silently skipped is not one). This module ships the factories the
+ * ported phases need — the two self-actored user ones from Phase 1
+ * (`userRegistered`/`userLoggedIn`, where the acting user is also the
+ * target) and the three designer-actored mission ones from Phase 2
+ * (`missionCreated`/`missionUpdated`/`missionDeleted`); every remaining
+ * `NewAuditEntry` factory (mission lifecycle/moderation, bid, rating, admin
+ * actions) is added by the phase that introduces the mutation it records.
  *
  * `AuditService.search` (the admin listing) is intentionally not ported here
  * — it belongs to the audit *read* path, which lands in Phase 7.
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/audit/AuditService.java (`record` only)
- * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `self`, `quoted`)
+ * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `self`, `mission`, `quoted`)
  * - drone-missions-backend/.../data/model/AuditAction.java
  * - drone-missions-backend/.../data/model/AuditTargetType.java
  */
@@ -88,8 +90,16 @@ export interface AuditActorUser {
   username: string;
 }
 
-/** Mirrors `NewAuditEntry.quoted` — wraps a name in literal double quotes for `details`. */
-function quoted(name: string): string {
+/**
+ * Mirrors `NewAuditEntry.quoted` — wraps a name in literal double quotes for
+ * `details`.
+ *
+ * Accepts null because `mission.name` is a nullable column: Java's
+ * `"\"%s\"".formatted(null)` renders the literal `"null"`, and template
+ * interpolation renders exactly the same string here, so an unnamed mission
+ * produces an identical audit row either way.
+ */
+function quoted(name: string | null): string {
   return `"${name}"`;
 }
 
@@ -116,4 +126,55 @@ export function userRegistered(user: AuditActorUser): NewAuditEntry {
 /** Mirrors `NewAuditEntry.userLoggedIn`. */
 export function userLoggedIn(user: AuditActorUser): NewAuditEntry {
   return self(user, "USER_LOGGED_IN");
+}
+
+/**
+ * The minimal mission shape the mission factories below need — the id they
+ * target and the name they snapshot into `details`. Structural, so a loaded
+ * `Mission` satisfies it without this module importing the missions feature
+ * (audit is shared core; features depend on it, never the reverse).
+ */
+export interface AuditTargetMission {
+  id: number;
+  name: string | null;
+}
+
+/**
+ * Mirrors `NewAuditEntry.mission`: a mission-targeted entry whose `details`
+ * snapshots the mission's name, so the row still says *what* was acted on
+ * after the mission itself is deleted.
+ *
+ * The role is a constant per factory rather than the actor's actual role,
+ * exactly as in the source — it restates the `@PreAuthorize` gate the action
+ * already passed (here, `requireRole()` in the route layer).
+ */
+function missionEntry(
+  actorId: number,
+  actorRole: AuditActorRole,
+  action: AuditAction,
+  mission: AuditTargetMission,
+): NewAuditEntry {
+  return {
+    actorId,
+    actorRole,
+    action,
+    targetType: "MISSION",
+    targetId: mission.id,
+    details: quoted(mission.name),
+  };
+}
+
+/** Mirrors `NewAuditEntry.missionCreated`. */
+export function missionCreated(designerId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(designerId, "DESIGNER", "MISSION_CREATED", mission);
+}
+
+/** Mirrors `NewAuditEntry.missionUpdated`. */
+export function missionUpdated(designerId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(designerId, "DESIGNER", "MISSION_UPDATED", mission);
+}
+
+/** Mirrors `NewAuditEntry.missionDeleted`. */
+export function missionDeleted(designerId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(designerId, "DESIGNER", "MISSION_DELETED", mission);
 }

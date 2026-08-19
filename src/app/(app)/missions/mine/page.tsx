@@ -1,28 +1,28 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
+import { MissionList } from "@/features/missions/components/mission-list";
 
 export const metadata: Metadata = {
   title: "My Missions — Drone Missions",
 };
 
 /**
- * `/missions/mine` — the DESIGNER role home (see `roleHomePath` in
- * `features/auth/auth.client.ts`). Placeholder only: this phase (Phase 1 —
- * Auth & current user) is limited to authentication and the `(app)` shell
- * itself, so there is nothing mission-related to render yet. Exists purely
- * so the `(app)` route group has a real page to mount for a DESIGNER
- * visitor — without one, Next never renders `(app)/layout.tsx` for this
- * segment tree at all, which would leave its auth guard, profile-chip
- * fetch, and the `Topbar`'s logout button unreachable by navigation and
- * therefore untestable end-to-end.
+ * `/missions/mine` — the designer dashboard (every mission the caller owns,
+ * whatever its status) and the DESIGNER role home (see `roleHomePath` in
+ * `features/auth/auth.client.ts`). Mirrors the Angular route `{ path:
+ * 'missions/mine', component: MissionListComponent, canActivate: [authGuard],
+ * data: { mine: true } }` — the same component as `/missions`, with the flag
+ * that switches it to the dashboard.
  *
- * Replaced with the real designer "my missions" view by the missions phase
- * (see `MIGRATION_PLAN.md`).
+ * Only `authGuard` gates it in the source, not `designerGuard`: the dashboard
+ * lists whatever `GET /api/v1/missions/my-missions` returns for the caller,
+ * which is empty for a non-designer. The "New Mission" CTA is the only
+ * designer-only part, and `MissionList` gates that on the role itself.
  */
 export default function MyMissionsPage() {
   return (
-    <div className="mx-auto max-w-[1240px] p-8">
-      <h1 className="text-foreground text-xl font-semibold">My Missions</h1>
-      <p className="text-muted-foreground mt-2 text-sm">Coming soon.</p>
-    </div>
+    <Suspense>
+      <MissionList mine />
+    </Suspense>
   );
 }

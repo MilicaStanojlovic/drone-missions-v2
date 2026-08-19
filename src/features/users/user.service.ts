@@ -1,4 +1,5 @@
 import "server-only";
+import { ForbiddenError } from "@/lib/errors";
 import { findById as findUserById } from "./user.queries";
 import type { User } from "./user.types";
 
@@ -14,6 +15,23 @@ import type { User } from "./user.types";
  *
  * SOURCE: drone-missions-backend/.../business/service/user/UserService.java (`findById` only)
  */
+
+/**
+ * Thrown when a suspended account attempts an action moderation forbids —
+ * creating missions (Phase 2), bidding, or executing awarded work. Mirrors
+ * `UserSuspendedException`, whose base (`business/ForbiddenException.java`)
+ * maps to 403.
+ *
+ * Declared here, in the user feature's business layer, because it is a fact
+ * about the *account*, not about whatever the account was trying to do — the
+ * source likewise files it under `business/exception/user`, and throws it
+ * from the mission, bid and lifecycle services alike.
+ */
+export class UserSuspendedError extends ForbiddenError {
+  constructor() {
+    super("This account is suspended and cannot perform this action");
+  }
+}
 
 /**
  * Looks up a user by id. The query layer already implements the
