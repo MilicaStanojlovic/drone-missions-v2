@@ -18,8 +18,8 @@ import { withdraw } from "@/features/bids/bid.service";
  * Answers 204 with no body (`ResponseEntity.noContent()`), because the bid no
  * longer exists to be returned.
  *
- * The sibling `POST /api/v1/bids/{id}/accept` (designer-only) is Phase 5 and
- * deliberately absent.
+ * The sibling `POST /api/v1/bids/{id}/accept` (designer-only) lives in
+ * `accept/route.ts`, under this same dynamic segment.
  *
  * SOURCE: drone-missions-backend/.../web/controller/bid/BidController.java (`withdraw`)
  */

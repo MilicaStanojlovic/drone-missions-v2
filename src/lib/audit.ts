@@ -20,18 +20,19 @@ import {
  * (`userRegistered`/`userLoggedIn`, where the acting user is also the
  * target), the three designer-actored mission ones from Phase 2
  * (`missionCreated`/`missionUpdated`/`missionDeleted`) and the two
- * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`); every
- * remaining `NewAuditEntry` factory (mission lifecycle/moderation,
- * `bidAccepted`, rating, admin actions) is added by the phase that
- * introduces the mutation it records — `bidAccepted` with the accept flow in
- * Phase 5.
+ * pilot-actored bid ones from Phase 3 (`bidPlaced`/`bidWithdrawn`), and the
+ * four acceptance/lifecycle ones from Phase 5 (`bidAccepted` plus
+ * `missionStarted`/`missionCompleted`/`missionCancelled`); every
+ * remaining `NewAuditEntry` factory (mission moderation,
+ * rating, admin actions) is added by the phase that
+ * introduces the mutation it records.
  *
  * `AuditService.search` (the admin listing) is intentionally not ported here
  * — it belongs to the audit *read* path, which lands in Phase 7.
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/audit/AuditService.java (`record` only)
- * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `bidPlaced`, `bidWithdrawn`, `self`, `mission`, `quoted`)
+ * - drone-missions-backend/.../business/service/audit/NewAuditEntry.java (`userRegistered`, `userLoggedIn`, `missionCreated`, `missionUpdated`, `missionDeleted`, `missionStarted`, `missionCompleted`, `missionCancelled`, `bidPlaced`, `bidWithdrawn`, `bidAccepted`, `self`, `mission`, `quoted`)
  * - drone-missions-backend/.../data/model/AuditAction.java
  * - drone-missions-backend/.../data/model/AuditTargetType.java
  */
@@ -183,6 +184,33 @@ export function missionDeleted(designerId: number, mission: AuditTargetMission):
 }
 
 /**
+ * Mirrors `NewAuditEntry.missionCancelled` — designer-actored, like the other
+ * three mission factories the owning designer triggers.
+ *
+ * One row per *intent*, not per side effect: `MissionService.cancel` also
+ * rejects the mission's PENDING/ACCEPTED bids, and none of that is audited —
+ * exactly as `AuditAction`'s own javadoc spells out ("cancelling a mission
+ * rejects its bids, but only MISSION_CANCELLED is recorded").
+ */
+export function missionCancelled(designerId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(designerId, "DESIGNER", "MISSION_CANCELLED", mission);
+}
+
+/**
+ * Mirrors `NewAuditEntry.missionStarted` — PILOT, not DESIGNER: the awarded
+ * pilot is the one who starts the mission, and the constant role restates that
+ * gate the same way the designer factories restate theirs.
+ */
+export function missionStarted(pilotId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(pilotId, "PILOT", "MISSION_STARTED", mission);
+}
+
+/** Mirrors `NewAuditEntry.missionCompleted` — pilot-actored, like `missionStarted`. */
+export function missionCompleted(pilotId: number, mission: AuditTargetMission): NewAuditEntry {
+  return missionEntry(pilotId, "PILOT", "MISSION_COMPLETED", mission);
+}
+
+/**
  * The minimal bid shape the two bid factories need — the id they target, the
  * amount they snapshot, and the mission whose name goes into `details`. The
  * Java factories read exactly these off the entity (`bid.getId()`,
@@ -247,6 +275,26 @@ export function bidWithdrawn(pilotId: number, bid: AuditTargetBid): NewAuditEntr
   };
 }
 
-// `bidAccepted` (designer-actored, `BID_ACCEPTED`) is deliberately absent: the
-// accept flow it records lands in Phase 5, and this module only ships the
-// factory for a mutation that exists.
+/**
+ * Mirrors `NewAuditEntry.bidAccepted` — the same `"{amount} on
+ * \"{missionName}\""` snapshot as `bidWithdrawn`, but DESIGNER-actored: the
+ * mission's designer decides, so the actor is the designer while the target
+ * stays the pilot's bid.
+ *
+ * One row per intent again: `BidService.accept` also rejects every other
+ * pending bid on the mission, and those rejections are not audited (they are a
+ * side effect of this one decision, per `AuditAction`'s javadoc).
+ *
+ * The `bidPlaced` note on `BigDecimal`-vs-`number` rendering applies verbatim
+ * to this factory's `details` too.
+ */
+export function bidAccepted(designerId: number, bid: AuditTargetBid): NewAuditEntry {
+  return {
+    actorId: designerId,
+    actorRole: "DESIGNER",
+    action: "BID_ACCEPTED",
+    targetType: "BID",
+    targetId: bid.id,
+    details: `${bid.amount} on ${quoted(bid.mission.name)}`,
+  };
+}

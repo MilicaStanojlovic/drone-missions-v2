@@ -6,9 +6,9 @@ import type { UserRole } from "@/db/schema";
 import type { Bid } from "@/features/bids/bid.types";
 
 /**
- * Route-level suite for the phase-3 bid endpoints:
- * `POST|GET /api/v1/bids/mission/{missionId}`, `GET /api/v1/bids/my`, and
- * `DELETE /api/v1/bids/{id}`.
+ * Route-level suite for every `BidController` endpoint:
+ * `POST|GET /api/v1/bids/mission/{missionId}`, `GET /api/v1/bids/my`,
+ * `DELETE /api/v1/bids/{id}`, and `POST /api/v1/bids/{id}/accept`.
  *
  * Shaped like `src/app/api/v1/missions/routes.test.ts` rather than the live-DB
  * notification/auth suites: `BidService` is mocked and the exported handlers
@@ -27,14 +27,12 @@ import type { Bid } from "@/features/bids/bid.types";
  * `BidNotFoundError` -> 404. Their real behavior is pinned one layer down in
  * `src/features/bids/bid.service.test.ts`.
  *
- * All four paths are authenticated-only — none are in `src/middleware.ts`'s
+ * All five paths are authenticated-only — none are in `src/middleware.ts`'s
  * `PUBLIC_PATHS` — so the anonymous cases call `middleware()` directly, the
  * layer that actually rejects them in the deployed app (the precedent set by
  * `src/app/api/v1/notifications/routes.test.ts`), while the authenticated
  * cases pass the `x-user-id`/`x-user-role` headers `middleware.ts` would have
  * attached from the verified token's claims.
- *
- * `POST /api/v1/bids/{id}/accept` is Phase 5 and has no route to test.
  *
  * SOURCE: drone-missions-backend/.../web/controller/bid/BidController.java
  */
@@ -43,6 +41,7 @@ const placeMock = vi.fn();
 const listForMissionMock = vi.fn();
 const myBidsMock = vi.fn();
 const withdrawMock = vi.fn();
+const acceptMock = vi.fn();
 vi.mock("@/features/bids/bid.service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/bids/bid.service")>();
   return {
@@ -51,6 +50,7 @@ vi.mock("@/features/bids/bid.service", async (importOriginal) => {
     listForMission: (...args: unknown[]) => listForMissionMock(...args),
     myBids: (...args: unknown[]) => myBidsMock(...args),
     withdraw: (...args: unknown[]) => withdrawMock(...args),
+    accept: (...args: unknown[]) => acceptMock(...args),
   };
 });
 
@@ -58,11 +58,15 @@ vi.mock("@/features/bids/bid.service", async (importOriginal) => {
 // mocked service module (the two error classes come off `importOriginal`, so
 // they are the real ones the handlers will see).
 import { BidConflictError, BidNotFoundError } from "@/features/bids/bid.service";
-import { MissionNotFoundError } from "@/features/missions/mission.service";
+import {
+  MissionAccessDeniedError,
+  MissionNotFoundError,
+} from "@/features/missions/mission.service";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { GET as listRoute, POST as placeRoute } from "./mission/[missionId]/route";
 import { GET as myBidsRoute } from "./my/route";
 import { DELETE as withdrawRoute } from "./[id]/route";
+import { POST as acceptRoute } from "./[id]/accept/route";
 
 const PILOT_ID = 42;
 const DESIGNER_ID = 7;
@@ -604,6 +608,190 @@ describe("DELETE /api/v1/bids/{id}", () => {
   it("rejects an anonymous request with 401 at the middleware layer", async () => {
     const response = await middleware(
       new NextRequest(new URL("http://localhost/api/v1/bids/5"), { method: "DELETE" }),
+    );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/bids/{id}/accept", () => {
+  /** The award POST as the client sends it: no body, only the path and the token. */
+  function acceptRequest(url: string, userId = DESIGNER_ID, role: UserRole = "DESIGNER"): Request {
+    return new Request(url, { method: "POST", headers: authHeaders(userId, role) });
+  }
+
+  it("awards the mission and answers 200 with the accepted bid's BidResponse", async () => {
+    acceptMock.mockResolvedValue(fakeBid({ status: "ACCEPTED" }));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      id: 5,
+      missionId: MISSION_ID,
+      missionName: "Orchard survey",
+      pilotId: PILOT_ID,
+      pilotName: "pia",
+      status: "ACCEPTED",
+    });
+    // Only the winning bid is returned — not the mission, not the losers the
+    // service also rejected. The source returns a single `BidResponse`.
+    expect(Array.isArray(body)).toBe(false);
+    expect(body).not.toHaveProperty("mission");
+    expect(body).not.toHaveProperty("pilot");
+  });
+
+  it("hands the service the bid id and the awarding designer from the token", async () => {
+    acceptMock.mockResolvedValue(fakeBid({ status: "ACCEPTED" }));
+
+    await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept?userId=99"),
+      idContext("5"),
+    );
+
+    // Never the query string: the award is attributed to the verified caller.
+    expect(acceptMock).toHaveBeenCalledWith(5, DESIGNER_ID);
+  });
+
+  it("rejects a pilot with 403 and awards nothing (hasRole('DESIGNER'))", async () => {
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept", PILOT_ID, "PILOT"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    // The mirror image of the other three endpoints' pilot-only guard: the
+    // pilot who placed the bid may not accept it either.
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: "You do not have permission to perform this action",
+    });
+    expect(acceptMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an admin too — hasRole('DESIGNER') is a single exact role", async () => {
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept", 1, "ADMIN"),
+      idContext("5"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(acceptMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 with the mission's message when the caller is not its designer", async () => {
+    acceptMock.mockRejectedValue(new MissionAccessDeniedError(MISSION_ID));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept", 99),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    // A 403 rather than a 404 here, unlike withdraw: the mission's own
+    // endpoints already tell a designer that someone else's mission exists,
+    // so the ownership failure is not a leak — and the service checks it
+    // before either conflict, so a stranger never learns from a 409 whether
+    // the mission was already awarded.
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      status: "FORBIDDEN",
+      message: `You are not allowed to modify mission ${MISSION_ID}`,
+    });
+  });
+
+  it("answers 404 for a bid that does not exist", async () => {
+    acceptMock.mockRejectedValue(new BidNotFoundError(5));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toMatchObject({ status: "NOT_FOUND", message: "Bid 5 not found" });
+  });
+
+  it("answers 404 when the bid's mission has since been deleted", async () => {
+    acceptMock.mockRejectedValue(new MissionNotFoundError(MISSION_ID));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.message).toBe("Mission 1 not found");
+  });
+
+  it("answers 409 for a mission that has already been awarded", async () => {
+    acceptMock.mockRejectedValue(new BidConflictError("Mission 1 has already been awarded"));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      status: "CONFLICT",
+      message: "Mission 1 has already been awarded",
+    });
+  });
+
+  it("answers 409 for a bid that has already been decided", async () => {
+    acceptMock.mockRejectedValue(new BidConflictError("Bid 5 has already been decided"));
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).message).toBe("Bid 5 has already been decided");
+  });
+
+  it("answers 409 — a conflict, not a 403 — while the bid's pilot is suspended", async () => {
+    acceptMock.mockRejectedValue(
+      new BidConflictError("Bid 5 cannot be accepted while its pilot is suspended"),
+    );
+
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/5/accept"),
+      idContext("5"),
+    );
+    const body = await response.json();
+
+    // "Frozen, not rejected": a conflict says the award can be retried once
+    // the account is reactivated, which a 403 about the *caller* would not.
+    expect(response.status).toBe(409);
+    expect(body.status).toBe("CONFLICT");
+    expect(body.message).toBe("Bid 5 cannot be accepted while its pilot is suspended");
+  });
+
+  it("rejects a non-numeric bid id with 400 and awards nothing", async () => {
+    const response = await acceptRoute(
+      acceptRequest("http://localhost/api/v1/bids/abc/accept"),
+      idContext("abc"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.data).toMatchObject({ id: "must be a number" });
+    expect(acceptMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an anonymous request with 401 at the middleware layer", async () => {
+    const response = await middleware(
+      new NextRequest(new URL("http://localhost/api/v1/bids/5/accept"), { method: "POST" }),
     );
 
     expect(response.status).toBe(401);

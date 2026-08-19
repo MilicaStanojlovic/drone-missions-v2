@@ -30,9 +30,8 @@ import type { BidResponse } from "@/features/bids/bid.types";
  * `withErrorHandling()` maps all of them; the handlers stay parse -> validate
  * -> service -> shape.
  *
- * `POST /api/v1/bids/{id}/accept` — the designer's award flow — is Phase 5 and
- * deliberately absent (see `bid.service.ts`, which does not implement
- * `accept` yet).
+ * `POST /api/v1/bids/{id}/accept` — the designer's award flow — is the fourth
+ * endpoint of this controller and lives in `bids/[id]/accept/route.ts`.
  *
  * SOURCE: drone-missions-backend/.../web/controller/bid/BidController.java
  * (`place`, `listForMission`)

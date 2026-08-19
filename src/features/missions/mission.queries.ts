@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { mission, users, type MissionStatus } from "@/db/schema";
 import type { User } from "@/features/users/user.types";
 import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mission.types";
@@ -19,15 +19,16 @@ import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mi
  * snapshot back over columns (`status`, `awardedPilotId`) an edit deliberately
  * never touches.
  *
- * Phase-2 slice only. `findByAwardedPilotId` (Phase 5), `findOverdue`
- * (Phase 8), `searchAll` and `countByStatus` (Phases 7/9) and the decorator's
- * `invalidateLists` (Phase 3's cache task) are not ported here.
+ * `findOverdue` (Phase 8), `searchAll` and `countByStatus` (Phases 7/9) and
+ * the decorator's `invalidateLists` (Phase 3's cache task) are not ported
+ * here.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/access/JpaMissionDao.java
  * - drone-missions-backend/.../data/access/MissionDao.java (contract + findById/findFresh rule)
  * - drone-missions-backend/.../data/access/OpenMissionQuery.java
- * - drone-missions-backend/.../data/repository/MissionRepository.java (`findByDesigner_Id`)
+ * - drone-missions-backend/.../data/repository/MissionRepository.java
+ *   (`findByDesigner_Id`, `findByAwardedPilot_Id`)
  * - drone-missions-backend/.../data/model/Mission.java
  */
 
@@ -85,8 +86,8 @@ function toMission(row: JoinedRow): Mission {
  * silently drop those ownerless missions from every list (the source's
  * `MissionControllerTest` asserts they survive the open feed).
  */
-function selectMissions() {
-  return getDb().select().from(mission).leftJoin(users, eq(mission.userId, users.id));
+function selectMissions(tx?: DbHandle) {
+  return dbFor(tx).select().from(mission).leftJoin(users, eq(mission.userId, users.id));
 }
 
 /**
@@ -107,9 +108,13 @@ export async function findById(id: number): Promise<Mission | undefined> {
  * module holds no cache. It stays a separate entry point so the caching
  * decorator has a seam to make it always hit the database (and evict any
  * cached copy on the way through) without any call site changing.
+ *
+ * Takes the optional transaction handle for the same reason `save` does (see
+ * there): inside a transaction it must read the caller's uncommitted rows,
+ * which is exactly what `save`'s read-back needs.
  */
-export async function findFresh(id: number): Promise<Mission | undefined> {
-  const [row] = await selectMissions().where(eq(mission.id, id));
+export async function findFresh(id: number, tx?: DbHandle): Promise<Mission | undefined> {
+  const [row] = await selectMissions(tx).where(eq(mission.id, id));
   return row ? toMission(row) : undefined;
 }
 
@@ -174,6 +179,31 @@ export async function findByUserId(userId: number): Promise<Mission[]> {
 }
 
 /**
+ * Missions awarded to this pilot — the "my jobs" listing. Mirrors
+ * `MissionRepository.findByAwardedPilot_Id`, reached through
+ * `JpaMissionDao.findByAwardedPilotId`.
+ *
+ * Structurally `findByUserId` one column over, and deliberately so: the same
+ * LEFT designer join (the pilot still needs the designer attached for the
+ * response), no moderation filter, and no ordering.
+ *
+ * No moderation filter for the reason the repository states in a comment —
+ * HIDDEN only affects the open feed, so the owner and awarded-pilot lists
+ * need none; admin removal is a real delete, not a state. A pilot therefore
+ * keeps seeing a job that was hidden from the marketplace after it was
+ * awarded to them.
+ *
+ * No `ORDER BY`, because the derived Spring Data query declares none: it has
+ * no `OrderBy` clause and no `Sort` argument, so the source's ordering is
+ * whatever Postgres returns. Adding one here would be a behaviour change, not
+ * a tidy-up — ordering for display belongs to the caller.
+ */
+export async function findByAwardedPilotId(pilotId: number): Promise<Mission[]> {
+  const rows = await selectMissions().where(eq(mission.awardedPilotId, pilotId));
+  return rows.map(toMission);
+}
+
+/**
  * Persist a new or modified mission and return it with its designer resolved.
  * Mirrors `JpaMissionDao.save` over Spring Data's `save()`: an absent id
  * inserts, a present id merges *every* column of the supplied object over the
@@ -188,8 +218,14 @@ export async function findByUserId(userId: number): Promise<Mission[]> {
  * The saved row is re-read through the designer join instead of being
  * assembled from the write: `returning()` yields the mission columns only,
  * and callers (the mapper above all) need the designer account attached.
+ *
+ * `tx` lets a multi-statement flow (`BidService.accept`, which awards the
+ * mission in the same transaction that decides the bids) run this write on
+ * its own transaction handle — the explicit form of the ambient transaction
+ * the source's `@Transactional` supplies. Absent, the write auto-commits on
+ * the pool exactly as before.
  */
-export async function save(input: MissionWrite): Promise<Mission> {
+export async function save(input: MissionWrite, tx?: DbHandle): Promise<Mission> {
   const now = new Date();
   const columns = {
     name: input.name,
@@ -208,13 +244,13 @@ export async function save(input: MissionWrite): Promise<Mission> {
 
   let savedId: number;
   if (input.id === undefined || input.id === null) {
-    const [inserted] = await getDb()
+    const [inserted] = await dbFor(tx)
       .insert(mission)
       .values({ ...columns, createdAt: now, updatedAt: now })
       .returning({ id: mission.id });
     savedId = inserted.id;
   } else {
-    const [updated] = await getDb()
+    const [updated] = await dbFor(tx)
       .update(mission)
       .set({ ...columns, updatedAt: now })
       .where(eq(mission.id, input.id))
@@ -229,7 +265,9 @@ export async function save(input: MissionWrite): Promise<Mission> {
     savedId = updated.id;
   }
 
-  const saved = await findFresh(savedId);
+  // On the caller's handle: inside a transaction the row this just wrote is
+  // invisible to every other connection until commit.
+  const saved = await findFresh(savedId, tx);
   if (!saved) {
     throw new Error(`Mission ${savedId} vanished immediately after being saved`);
   }

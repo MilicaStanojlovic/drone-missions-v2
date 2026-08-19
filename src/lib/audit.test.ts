@@ -3,10 +3,14 @@ import { eq } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import {
+  bidAccepted,
   bidPlaced,
   bidWithdrawn,
+  missionCancelled,
+  missionCompleted,
   missionCreated,
   missionDeleted,
+  missionStarted,
   missionUpdated,
   record,
   userLoggedIn,
@@ -34,10 +38,11 @@ const hasDb = Boolean(process.env.DATABASE_URL);
  * The entry factories are pure functions, so they need no database — these
  * mirror the mission cases of `NewAuditEntryTest`
  * (`designerFactoriesPairRoleActionAndNameSnapshot`, plus the
- * updated/deleted actions); its `bidFactoriesSnapshotAmountAndMissionName`
- * case is mirrored in the next block. Its remaining cases belong to factories
- * that are still not ported: the pilot/moderation mission ones (Phases 5/7),
- * the rating one (Phase 6), and the admin user ones
+ * updated/deleted actions) plus `pilotFactoriesUseThePilotRole`; its
+ * `bidFactoriesSnapshotAmountAndMissionName` case is mirrored in the next
+ * block. Its remaining cases belong to factories that are still not ported:
+ * the moderation mission ones (Phase 7), the rating one (Phase 6), and the
+ * admin user ones
  * (Phase 7). `userFactoriesTargetTheUserAndSnapshotTheUsername`'s
  * `userSuspended`/`userReactivated` half is Phase 7 too; the self-actored
  * `selfActionsCarryTheUsersOwnRole` case is covered live below.
@@ -78,6 +83,46 @@ describe("mission audit factories", () => {
     });
   });
 
+  it("missionCancelled stays designer-actored like the other designer mission actions", () => {
+    // No `NewAuditEntryTest` case of its own — `cancel()` is a designer action,
+    // so the source routes it through the same `mission(..., DESIGNER, ...)`
+    // helper as created/updated/deleted.
+    expect(missionCancelled(7, mission)).toEqual({
+      actorId: 7,
+      actorRole: "DESIGNER",
+      action: "MISSION_CANCELLED",
+      targetType: "MISSION",
+      targetId: 4,
+      details: '"Orchard survey"',
+    });
+  });
+
+  it("pilotFactoriesUseThePilotRole", () => {
+    expect(missionStarted(5, mission).actorRole).toBe("PILOT");
+    expect(missionCompleted(5, mission).action).toBe("MISSION_COMPLETED");
+  });
+
+  it("the pilot lifecycle factories target the mission and snapshot its name", () => {
+    // The half of the pair the Java case leaves implicit by only asserting one
+    // field each: both go through the same `mission()` helper.
+    expect(missionStarted(5, mission)).toEqual({
+      actorId: 5,
+      actorRole: "PILOT",
+      action: "MISSION_STARTED",
+      targetType: "MISSION",
+      targetId: 4,
+      details: '"Orchard survey"',
+    });
+    expect(missionCompleted(5, mission)).toEqual({
+      actorId: 5,
+      actorRole: "PILOT",
+      action: "MISSION_COMPLETED",
+      targetType: "MISSION",
+      targetId: 4,
+      details: '"Orchard survey"',
+    });
+  });
+
   it("renders an unnamed mission the way String.formatted(null) does", () => {
     // `mission.name` is a nullable column; Java's `"\"%s\"".formatted(null)`
     // yields the literal `"null"`, and so does this.
@@ -86,9 +131,8 @@ describe("mission audit factories", () => {
 });
 
 /**
- * Mirrors `NewAuditEntryTest.bidFactoriesSnapshotAmountAndMissionName`, minus
- * its final `bidAccepted` assertion — that factory arrives with the accept
- * flow in Phase 5.
+ * Mirrors `NewAuditEntryTest.bidFactoriesSnapshotAmountAndMissionName` in full,
+ * its closing `bidAccepted` role assertion included.
  *
  * The Java fixture's `BigDecimal.TEN` becomes the number `10`, and both render
  * `"10"`, so the source's exact `details` expectation ports across unchanged.
@@ -125,6 +169,25 @@ describe("bid audit factories", () => {
       targetId: 8,
       details: '10 on "Orchard survey"',
     });
+  });
+
+  it("bidFactoriesSnapshotAmountAndMissionName — bidAccepted is designer-actored", () => {
+    expect(bidAccepted(7, bid).actorRole).toBe("DESIGNER");
+    expect(bidAccepted(7, bid)).toEqual({
+      actorId: 7,
+      actorRole: "DESIGNER",
+      action: "BID_ACCEPTED",
+      targetType: "BID",
+      targetId: 8,
+      details: '10 on "Orchard survey"',
+    });
+  });
+
+  it("bidAccepted snapshots the bid the same way bidWithdrawn does", () => {
+    // Same `details` shape, different actor: the pilot withdraws their own bid,
+    // the designer accepts someone else's.
+    expect(bidAccepted(7, bid).details).toBe(bidWithdrawn(5, bid).details);
+    expect(bidAccepted(7, bid).targetId).toBe(bid.id);
   });
 
   it("renders a decimal amount and an unnamed mission", () => {

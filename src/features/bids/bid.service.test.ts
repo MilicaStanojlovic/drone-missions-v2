@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mission } from "@/features/missions/mission.types";
-import { MissionNotFoundError } from "@/features/missions/mission.service";
+import {
+  MissionAccessDeniedError,
+  MissionNotFoundError,
+} from "@/features/missions/mission.service";
 import { UserNotFoundError } from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
 import type { User } from "@/features/users/user.types";
@@ -9,15 +12,14 @@ import type { Bid } from "./bid.types";
 /**
  * Vitest suite for `bid.service.ts`.
  *
- * Mirrors the phase-3 cases of `BidServiceTest` one-for-one, keeping the Java
- * method names as the `it` titles so the two suites can be diffed:
+ * Mirrors every case of `BidServiceTest` one-for-one, keeping the Java method
+ * names as the `it` titles so the two suites can be diffed:
  * `placeOnHiddenMissionReadsAsNotFound`,
  * `placeOnSuspendedDesignersMissionReadsAsNotFound`,
  * `placeBySuspendedPilotRejected`, `placingANewBidRecordsThePilot`,
  * `raisingAnExistingPendingBidRecordsItAsUpdated`,
- * `withdrawingAPendingBidRecordsThePilot`. Its last two cases
- * (`acceptingABidRecordsExactlyOnce`, `acceptFrozenWhilePilotSuspended`) are
- * skipped: `accept` is Phase 5 and has no port yet.
+ * `withdrawingAPendingBidRecordsThePilot`, `acceptingABidRecordsExactlyOnce`
+ * and `acceptFrozenWhilePilotSuspended`.
  *
  * The Java suite's own header calls it "moderation enforcement on bidding", so
  * it stops at the rules it was written for. The remaining `BidService`
@@ -25,14 +27,26 @@ import type { Bid } from "./bid.types";
  * BIDDING flip, the new-bid email, `listForMission`'s owner/other split,
  * `myBids`, and `withdraw`'s two rejections — lives entirely in this module in
  * this port (the route handlers are thin), so it is pinned in the extra
- * `describe`s below rather than left to a controller test.
+ * `describe`s below rather than left to a controller test. The same applies to
+ * `accept`: the Java suite covers only its audit entry and the suspended-pilot
+ * freeze, so each of its five other guards, the atomic write set and the
+ * winner/loser fan-out get a case here.
  *
  * Mocking mirrors the Java test's collaborators: the bid DAO, the mission DAO,
- * the user lookup and the mail port are stubbed, while `audit.ts` is only
- * partially mocked — `record()` (the DB write) is a spy and the real
- * `bidPlaced`/`bidWithdrawn` factories run, so a captured entry proves the
- * service audits the exact shape, including the "(updated)" suffix the Java
- * assertions look for.
+ * the user lookup, the notification service and the mail port are stubbed,
+ * while `audit.ts` is only partially mocked — `record()` (the DB write) is a
+ * spy and the real `bidPlaced`/`bidWithdrawn`/`bidAccepted` factories run, so
+ * a captured entry proves the service audits the exact shape, including the
+ * "(updated)" suffix the Java assertions look for. `@/db/client` is stubbed
+ * too, with a `transaction()` that just runs its callback on a sentinel
+ * handle — the Java test needs no equivalent because `@Transactional` is
+ * applied by a proxy that a plain Mockito unit test never builds. That stub is
+ * also this suite's one blind spot: it can prove the writes are threaded onto
+ * a single handle, but not that a failure part-way through leaves the database
+ * unchanged, which only a real transaction can show. `bid.service.live.test.ts`
+ * covers that by injecting a failing step into an open transaction over real
+ * rows; the case below pins the half that lives above the database (nothing
+ * after the commit runs).
  *
  * SOURCE:
  * - drone-missions-backend/.../business/service/bid/BidServiceTest.java
@@ -42,6 +56,7 @@ import type { Bid } from "./bid.types";
 const queriesMock = {
   findById: vi.fn(),
   findByMissionAndPilot: vi.fn(),
+  findByMissionAndStatus: vi.fn(),
   findByMissionOrderByCreatedAtDesc: vi.fn(),
   findByPilotOrderByCreatedAtDesc: vi.fn(),
   save: vi.fn(),
@@ -50,6 +65,7 @@ const queriesMock = {
 vi.mock("./bid.queries", () => ({
   findById: (...args: unknown[]) => queriesMock.findById(...args),
   findByMissionAndPilot: (...args: unknown[]) => queriesMock.findByMissionAndPilot(...args),
+  findByMissionAndStatus: (...args: unknown[]) => queriesMock.findByMissionAndStatus(...args),
   findByMissionOrderByCreatedAtDesc: (...args: unknown[]) =>
     queriesMock.findByMissionOrderByCreatedAtDesc(...args),
   findByPilotOrderByCreatedAtDesc: (...args: unknown[]) =>
@@ -63,23 +79,48 @@ const daoMock = {
   findFresh: vi.fn(),
   findOpen: vi.fn(),
   findByUserId: vi.fn(),
+  findByAwardedPilotId: vi.fn(),
   invalidateLists: vi.fn(),
+  invalidate: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
 };
 vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
+/**
+ * The stand-in for the handle Drizzle passes a `db.transaction` callback. The
+ * service only ever forwards it to the query layer, so an opaque sentinel is
+ * enough — and it is what lets the assertions below prove each write really
+ * ran on the transaction rather than on the pool.
+ */
+const txHandle = { __transaction: true };
+const transactionMock = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(txHandle));
+vi.mock("@/db/client", () => ({
+  getDb: () => ({ transaction: (run: (tx: unknown) => Promise<unknown>) => transactionMock(run) }),
+}));
+
 const findUserByIdMock = vi.fn();
+const findUserByIdOrUndefinedMock = vi.fn();
 vi.mock("@/features/users/user.queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
-  return { ...actual, findById: (...args: unknown[]) => findUserByIdMock(...args) };
+  return {
+    ...actual,
+    findById: (...args: unknown[]) => findUserByIdMock(...args),
+    findByIdOrUndefined: (...args: unknown[]) => findUserByIdOrUndefinedMock(...args),
+  };
 });
 
+const createNotificationMock = vi.fn();
+vi.mock("@/features/notifications/notification.service", () => ({
+  create: (...args: unknown[]) => createNotificationMock(...args),
+}));
+
 const sendNewBidMock = vi.fn();
+const sendBidDecisionMock = vi.fn();
 vi.mock("@/lib/email/email.service", () => ({
   emailService: {
     sendNewBid: (...args: unknown[]) => sendNewBidMock(...args),
-    sendBidDecision: vi.fn(),
+    sendBidDecision: (...args: unknown[]) => sendBidDecisionMock(...args),
     sendMissionOverdue: vi.fn(),
     sendMissionCancelled: vi.fn(),
   },
@@ -94,6 +135,7 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 // `vi.mock` calls above are hoisted by Vitest, so these static imports
 // already resolve against the mocked modules.
 import {
+  accept,
   BidConflictError,
   BidNotFoundError,
   listForMission,
@@ -165,6 +207,41 @@ function fakeBid(overrides: Partial<Bid> = {}): Bid {
     pilot: { id: 5, username: "user5" },
     ...overrides,
   };
+}
+
+/**
+ * The Java accept cases' fixture, in one place: bid 3 from pilot 5 wins over
+ * bid 4 from pilot 6 on mission 1, owned by designer 7 and still PUBLISHED.
+ *
+ * The still-pending lookup returns `[winner, loser]` exactly as the Java stub
+ * does — including the winner, so the service's own id filter is what keeps it
+ * out of the rejections rather than the stub's shape.
+ */
+function arrangeAccept(
+  overrides: { winner?: Bid; loser?: Bid; mission?: Mission; pilot?: User } = {},
+) {
+  const winner =
+    overrides.winner ??
+    fakeBid({ id: 3, amount: 10, pilotId: 5, pilot: { id: 5, username: "user5" } });
+  const loser =
+    overrides.loser ??
+    fakeBid({ id: 4, amount: 12, pilotId: 6, pilot: { id: 6, username: "user6" } });
+  const mission = overrides.mission ?? fakeMission();
+  const pilot = overrides.pilot ?? fakeUser(5, false);
+
+  queriesMock.findById.mockResolvedValue(winner);
+  daoMock.findFresh.mockResolvedValue(mission);
+  findUserByIdMock.mockResolvedValue(pilot);
+  findUserByIdOrUndefinedMock.mockImplementation(async (id: number) => fakeUser(id, false));
+  queriesMock.findByMissionAndStatus.mockResolvedValue([winner, loser]);
+  // `save` echoes the status back on the row it was handed, the way the real
+  // query re-reads the written row.
+  queriesMock.save.mockImplementation(async (write: { id: number; status: Bid["status"] }) => ({
+    ...(write.id === loser.id ? loser : winner),
+    status: write.status,
+  }));
+  daoMock.save.mockImplementation(async (input: Mission) => input);
+  return { winner, loser, mission, pilot };
 }
 
 /** The single audit entry the service recorded — the Java test's `ArgumentCaptor`. */
@@ -252,6 +329,250 @@ describe("bid.service.ts", () => {
       expect(capturedEntry().details).toContain("(updated)");
       // The existing row's id is what makes `save()` take its UPDATE branch.
       expect(queriesMock.save.mock.calls[0][0].id).toBe(3);
+    });
+  });
+
+  describe("accept — the BidServiceTest cases", () => {
+    it("acceptingABidRecordsExactlyOnce", async () => {
+      const { winner } = arrangeAccept();
+
+      await accept(3, 7);
+
+      const entry = capturedEntry();
+      expect(entry.actorId).toBe(7);
+      expect(entry.action).toBe("BID_ACCEPTED");
+      // The losing bids are a side effect of this one decision and are not
+      // audited — "exactly once" is the whole point of the Java case.
+      expect(entry.targetId).toBe(winner.id);
+    });
+
+    it("acceptFrozenWhilePilotSuspended", async () => {
+      arrangeAccept({ pilot: fakeUser(5, true) });
+
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(BidConflictError);
+      await expect(accept(3, 7)).rejects.toThrow("suspended");
+      // Frozen, not rejected: nothing is written at all, so the bid is still
+      // PENDING and becomes acceptable again once the pilot is reactivated.
+      expect(queriesMock.save).not.toHaveBeenCalled();
+      expect(daoMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- Beyond the Java suite: accept's remaining guards and side effects ---
+
+  describe("accept — guards", () => {
+    it("reads a missing bid as not found", async () => {
+      queriesMock.findById.mockResolvedValue(undefined);
+
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(BidNotFoundError);
+      expect(daoMock.findFresh).not.toHaveBeenCalled();
+    });
+
+    it("reads a vanished mission as not found", async () => {
+      arrangeAccept();
+      daoMock.findFresh.mockResolvedValue(undefined);
+
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(MissionNotFoundError);
+    });
+
+    it("refuses a caller who does not own the mission", async () => {
+      arrangeAccept();
+
+      await expect(accept(3, 8)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+      expect(queriesMock.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses an ownerless mission — nobody may award it", async () => {
+      arrangeAccept({ mission: fakeMission({ designer: null, userId: null }) });
+
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+    });
+
+    it("refuses a mission that has already been awarded", async () => {
+      arrangeAccept({ mission: fakeMission({ status: "AWARDED" }) });
+
+      await expect(accept(3, 7)).rejects.toThrow("Mission 1 has already been awarded");
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(BidConflictError);
+      expect(queriesMock.save).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a bid that has already been decided", async () => {
+      arrangeAccept({ winner: fakeBid({ id: 3, status: "REJECTED" }) });
+
+      await expect(accept(3, 7)).rejects.toThrow("Bid 3 has already been decided");
+      await expect(accept(3, 7)).rejects.toBeInstanceOf(BidConflictError);
+      expect(queriesMock.save).not.toHaveBeenCalled();
+    });
+
+    it("checks ownership before the conflicts — a stranger never learns the status", async () => {
+      // Both would fail: the mission is awarded *and* the caller is not its
+      // owner. The source checks ownership first, so this must be a 403.
+      arrangeAccept({ mission: fakeMission({ status: "AWARDED" }) });
+
+      await expect(accept(3, 8)).rejects.toBeInstanceOf(MissionAccessDeniedError);
+    });
+
+    it("loads the mission fresh, never from the cache — it is about to write it", async () => {
+      arrangeAccept();
+
+      await accept(3, 7);
+
+      expect(daoMock.findFresh).toHaveBeenCalledWith(1);
+      expect(daoMock.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("accept — the atomic write set", () => {
+    it("accepts the winner, rejects every other pending bid, awards the mission", async () => {
+      const { winner, loser } = arrangeAccept();
+
+      const returned = await accept(3, 7);
+
+      expect(returned.status).toBe("ACCEPTED");
+      expect(returned.id).toBe(winner.id);
+      // Winner first, then the one loser — and no third write: the winner is
+      // filtered out of the still-pending set by id.
+      expect(queriesMock.save).toHaveBeenCalledTimes(2);
+      expect(queriesMock.save.mock.calls[0][0]).toMatchObject({ id: 3, status: "ACCEPTED" });
+      expect(queriesMock.save.mock.calls[1][0]).toMatchObject({ id: loser.id, status: "REJECTED" });
+      expect(daoMock.save).toHaveBeenCalledTimes(1);
+      expect(daoMock.save.mock.calls[0][0]).toMatchObject({
+        id: 1,
+        status: "AWARDED",
+        awardedPilotId: 5,
+      });
+    });
+
+    it("runs all three writes on one transaction handle", async () => {
+      arrangeAccept();
+
+      await accept(3, 7);
+
+      expect(transactionMock).toHaveBeenCalledTimes(1);
+      expect(queriesMock.save.mock.calls[0][1]).toBe(txHandle);
+      expect(queriesMock.save.mock.calls[1][1]).toBe(txHandle);
+      expect(queriesMock.findByMissionAndStatus).toHaveBeenCalledWith(1, "PENDING", txHandle);
+      expect(daoMock.save.mock.calls[0][1]).toBe(txHandle);
+    });
+
+    it("evicts the mission again once the transaction has committed", async () => {
+      arrangeAccept();
+
+      await accept(3, 7);
+
+      // The port of the source's `afterCompletion` re-eviction: a concurrent
+      // reader may have re-cached the pre-award row while the write was open.
+      expect(daoMock.invalidate).toHaveBeenCalledWith(1);
+    });
+
+    it("propagates a mid-transaction failure and runs none of the post-commit work", async () => {
+      arrangeAccept();
+      // The third write fails, after the winner and the loser have already
+      // been written. What that rolls *back* is a property of a real Postgres
+      // transaction and is pinned in `bid.service.live.test.ts`, where the
+      // failure is injected into an open transaction over real rows; what a
+      // stubbed `transaction()` can show is the other half — that everything
+      // sequenced after the commit is skipped.
+      daoMock.save.mockRejectedValue(new Error("mission write failed"));
+
+      await expect(accept(3, 7)).rejects.toThrow("mission write failed");
+
+      // No second eviction, no notifications, no emails, no audit entry: the
+      // failure surfaces to the caller instead of an acceptance being
+      // announced that the database never kept.
+      expect(daoMock.invalidate).not.toHaveBeenCalled();
+      expect(createNotificationMock).not.toHaveBeenCalled();
+      expect(sendBidDecisionMock).not.toHaveBeenCalled();
+      expect(recordMock).not.toHaveBeenCalled();
+    });
+
+    it("leaves a bid that is no longer pending alone", async () => {
+      // A bid decided between the caller's read and this transaction is simply
+      // not in the still-pending set, so nothing rewrites it.
+      const { loser } = arrangeAccept();
+      queriesMock.findByMissionAndStatus.mockResolvedValue([]);
+
+      await accept(3, 7);
+
+      expect(queriesMock.save).toHaveBeenCalledTimes(1);
+      expect(queriesMock.save.mock.calls[0][0].id).not.toBe(loser.id);
+    });
+  });
+
+  describe("accept — notifications and emails", () => {
+    it("notifies and emails the winner as accepted and each loser as rejected", async () => {
+      arrangeAccept();
+
+      await accept(3, 7);
+
+      expect(createNotificationMock).toHaveBeenCalledTimes(2);
+      expect(createNotificationMock.mock.calls[0][0]).toEqual({
+        userId: 5,
+        type: "BID_ACCEPTED",
+        title: "Bid accepted",
+        message: 'Your bid on "Orchard survey" was accepted — the mission is yours.',
+        mission: { id: 1, name: "Orchard survey" },
+      });
+      expect(createNotificationMock.mock.calls[1][0]).toMatchObject({
+        userId: 6,
+        type: "BID_REJECTED",
+      });
+
+      expect(sendBidDecisionMock).toHaveBeenCalledTimes(2);
+      const [winnerPilot, winnerMission, winnerAmount, winnerAccepted] =
+        sendBidDecisionMock.mock.calls[0];
+      expect(winnerPilot).toEqual({ email: "user5@example.com", username: "user5" });
+      expect(winnerMission).toEqual({ id: 1, name: "Orchard survey", location: "Novi Sad" });
+      expect(winnerAmount).toBe(10);
+      expect(winnerAccepted).toBe(true);
+      expect(sendBidDecisionMock.mock.calls[1][0]).toEqual({
+        email: "user6@example.com",
+        username: "user6",
+      });
+      expect(sendBidDecisionMock.mock.calls[1][3]).toBe(false);
+    });
+
+    it("still awards the mission when a pilot's account has vanished — no email", async () => {
+      arrangeAccept();
+      // `notifyDecision`'s lookup is the source's `.ifPresent`: no account, no
+      // email, and the decision that was already written still stands.
+      findUserByIdOrUndefinedMock.mockResolvedValue(undefined);
+
+      await expect(accept(3, 7)).resolves.toMatchObject({ status: "ACCEPTED" });
+      expect(sendBidDecisionMock).not.toHaveBeenCalled();
+      expect(createNotificationMock).toHaveBeenCalledTimes(2);
+      expect(recordMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("notifies only after the writes, and audits last", async () => {
+      arrangeAccept();
+      const order: string[] = [];
+      queriesMock.save.mockImplementation(async (write: { id: number; status: string }) => {
+        order.push(`save:${write.status}`);
+        return fakeBid({ id: write.id, status: write.status as Bid["status"] });
+      });
+      daoMock.save.mockImplementation(async () => {
+        order.push("award");
+      });
+      createNotificationMock.mockImplementation(async () => {
+        order.push("notify");
+      });
+      recordMock.mockImplementation(async () => {
+        order.push("audit");
+      });
+
+      await accept(3, 7);
+
+      expect(order).toEqual([
+        "save:ACCEPTED",
+        "save:REJECTED",
+        "award",
+        "notify",
+        "notify",
+        "audit",
+      ]);
     });
   });
 

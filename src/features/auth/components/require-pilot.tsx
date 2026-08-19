@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { getRole, isLoggedIn } from "@/features/auth/auth.client";
 
 /**
- * Route guard for the pilot-only pages (`/my-bids`). Ports `pilotGuard`: a
+ * Route guard for the pilot-only pages (`/my-bids`, `/my-jobs`). Ports
+ * `pilotGuard`: a
  * logged-out visitor goes to `/login`, a logged-in non-pilot is bounced to the
  * designer dashboard (`/missions/mine`) — the source's exact fallback, which
  * is NOT the role-home mapping (an admin lands there too, not on

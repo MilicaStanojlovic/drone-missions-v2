@@ -1,11 +1,20 @@
 import "server-only";
-import { bidPlaced, bidWithdrawn, record } from "@/lib/audit";
+import { getDb } from "@/db/client";
+import { bidAccepted, bidPlaced, bidWithdrawn, record } from "@/lib/audit";
 import { emailService } from "@/lib/email/email.service";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { getMissionDao } from "@/features/missions/mission.cache";
-import { MissionNotFoundError } from "@/features/missions/mission.service";
+import {
+  MissionAccessDeniedError,
+  MissionNotFoundError,
+} from "@/features/missions/mission.service";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
-import { findById as findUserById } from "@/features/users/user.queries";
+import { create as createNotification } from "@/features/notifications/notification.service";
+import { NewNotification } from "@/features/notifications/notification.types";
+import {
+  findById as findUserById,
+  findByIdOrUndefined as findUserByIdOrUndefined,
+} from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
 import * as queries from "./bid.queries";
 import type { Bid } from "./bid.types";
@@ -13,13 +22,10 @@ import type { Bid } from "./bid.types";
 /**
  * Bid business logic (replaces `business.service.bid.BidService`).
  *
- * Phase-3 slice: `place`, `listForMission`, `myBids`, `withdraw`. The fifth
- * method, `accept` — one bid becomes ACCEPTED, the mission is AWARDED to its
- * pilot, every other pending bid is REJECTED, and both sides get an in-app
- * notification plus a decision email — is **Phase 5** and is deliberately not
- * implemented here. That is also why this module has no `NotificationService`
- * collaborator: `place` sends no in-app notification (see below), so `accept`
- * is the only method that needs one.
+ * All five methods: `place`, `listForMission`, `myBids`, `withdraw` and
+ * `accept`. `accept` is the only one that notifies — `place` sends an email
+ * but raises no in-app notification (see below) — and the only one that
+ * writes more than one row, hence the only `db.transaction` here.
  *
  * Two source details this port keeps exactly, because both are load-bearing:
  *
@@ -154,8 +160,8 @@ export async function place(
 
   // Let the mission's owner know a bid came in (best-effort email — the port
   // never rejects, mirroring the source's `@Async void` send). The source
-  // sends NO in-app notification on place; only the accept flow (Phase 5)
-  // creates notifications, so none is created here.
+  // sends NO in-app notification on place; only `accept` below creates
+  // notifications, so none is created here.
   const designer = mission.designer;
   const pilotName = pilot.username;
   if (designer !== null) {
@@ -222,6 +228,147 @@ export async function withdraw(bidId: number, pilotId: number): Promise<void> {
   }
   await queries.deleteBid(bid);
   await record(bidWithdrawn(pilotId, bid));
+}
+
+/**
+ * Accept one bid: it becomes ACCEPTED, every *other* pending bid on the
+ * mission is REJECTED, and the mission is AWARDED to the bid's pilot. Only the
+ * mission's owner may award, and only while it is still open. Mirrors
+ * `BidService.accept`.
+ *
+ * ## Guard order (the source's, and observable)
+ * bid exists -> **fresh** mission -> caller owns the mission -> mission still
+ * open -> bid still pending -> pilot not suspended. Two of those orderings
+ * carry meaning:
+ *
+ *  - the mission is loaded through `findFresh`, never the cached `findById`:
+ *    this flow writes the mission back as AWARDED, and merging a cached
+ *    snapshot would revert whatever a concurrent bid changed (the same rule
+ *    `place` follows).
+ *  - the ownership check comes *before* both conflict checks, so a stranger
+ *    poking at bid ids always gets 403 and never learns from a 409 whether
+ *    the mission was already awarded.
+ *
+ * A suspended pilot's bid is **frozen, not rejected**: the last guard leaves
+ * it PENDING, so it becomes acceptable again if the account is reactivated —
+ * the source's explicit comment, and the reason this is a conflict rather
+ * than a silent skip.
+ *
+ * ## Atomicity
+ * The three writes (winner ACCEPTED, losers REJECTED, mission AWARDED) run in
+ * one `db.transaction`, the port of the source's `@Transactional`: a mission
+ * awarded with its losing bids left pending — or a winner accepted on a
+ * mission that never got awarded — would be unrecoverable state, and both are
+ * reachable if the second write fails. The cached mission copy is evicted
+ * twice, once by the write itself and once after the commit returns, which is
+ * what `CachingMissionDao`'s `afterCompletion` synchronisation does in Java
+ * (see `mission.cache.ts`).
+ *
+ * KNOWN DIVERGENCE — notifications and the audit entry are raised *after* the
+ * transaction commits, where the source raises them inside it (its
+ * `NotificationService`/`AuditService` are not themselves transactional, so
+ * they join the caller's transaction). Observable only if a notification or
+ * audit insert fails: Spring would roll the acceptance back, this port keeps
+ * it and lets the error surface. Deliberate, and the direction the plan
+ * specifies — the acceptance is the user's intent, while its notification is
+ * a side effect, and re-opening an already-awarded mission because a
+ * notification row would not insert is the worse failure. The emails were
+ * always outside the transaction: `@Async` in the source, best-effort here.
+ *
+ * @throws BidNotFoundError if no such bid exists
+ * @throws MissionNotFoundError if the bid's mission has since been deleted
+ * @throws MissionAccessDeniedError if the caller does not own the mission
+ * @throws BidConflictError if the mission has already been awarded, the bid
+ * has already been decided, or its pilot is suspended
+ */
+export async function accept(bidId: number, designerId: number): Promise<Bid> {
+  const bid = await getBidOrThrow(bidId);
+  // Fresh, not cached: this awards the mission and writes it back.
+  const mission = await getFreshMissionOrThrow(bid.mission.id);
+  if (designerId !== mission.userId) {
+    throw new MissionAccessDeniedError(mission.id);
+  }
+  if (!BIDDABLE_STATUSES.includes(mission.status)) {
+    throw new BidConflictError(`Mission ${mission.id} has already been awarded`);
+  }
+  if (bid.status !== "PENDING") {
+    throw new BidConflictError(`Bid ${bidId} has already been decided`);
+  }
+  // The suspension flag lives on the pilot's account. The source reads it off
+  // the loaded `@ManyToOne` relation; the joined pilot here carries only the
+  // two columns the mapper needs (never a password hash), so the account is
+  // fetched — and then reused as the awarded pilot below. The throwing lookup
+  // is safe: `bid.pilot_id` is NOT NULL with a foreign key (V8), so the row
+  // cannot be missing, and this runs only after every earlier guard has
+  // passed, so no ordering is observable.
+  const pilot = await findUserById(bid.pilot.id);
+  if (pilot.suspended) {
+    // Frozen, not rejected: the bid stays pending and becomes acceptable again
+    // if the pilot is reactivated.
+    throw new BidConflictError(`Bid ${bidId} cannot be accepted while its pilot is suspended`);
+  }
+
+  const { winner, losers } = await getDb().transaction(async (tx) => {
+    const accepted = await queries.save({ ...bid, status: "ACCEPTED" }, tx);
+    // Re-read inside the transaction rather than trusting the caller's view:
+    // this is the set of bids that are still pending *now*. The winner is
+    // already ACCEPTED by this point and so cannot come back, but the
+    // source's explicit id filter is kept — it is what makes the intent
+    // ("every *other* pending bid") independent of the write order.
+    const stillPending = await queries.findByMissionAndStatus(mission.id, "PENDING", tx);
+    const rejected: Bid[] = [];
+    for (const other of stillPending) {
+      if (other.id === bid.id) {
+        continue;
+      }
+      // Sequential, not `Promise.all`: a transaction is one connection, and
+      // interleaving statements on it is not something the driver supports.
+      rejected.push(await queries.save({ ...other, status: "REJECTED" }, tx));
+    }
+
+    await getMissionDao().save({ ...mission, status: "AWARDED", awardedPilotId: pilot.id }, tx);
+    return { winner: accepted, losers: rejected };
+  });
+  // The commit has landed; drop anything a concurrent reader cached from the
+  // pre-award row while the transaction was open.
+  getMissionDao().invalidate(mission.id);
+
+  await notifyDecision(mission, winner, true);
+  for (const loser of losers) {
+    await notifyDecision(mission, loser, false);
+  }
+  await record(bidAccepted(designerId, winner));
+  return winner;
+}
+
+/**
+ * In-app notification + best-effort email to a pilot whose bid was decided.
+ * Mirrors `BidService.notifyDecision`, including its re-lookup of the pilot:
+ * the account is fetched with the non-throwing query and a missing one simply
+ * gets no email (`.ifPresent`), because a decision that has already been
+ * written must not be undone by an absent mailbox.
+ *
+ * `mission.name` is nullable in this schema while both the notification copy
+ * and the mail port take a plain `string`; an unnamed mission therefore
+ * renders as an empty slot inside the quotes, which is what Thymeleaf printed
+ * for a null too — the same substitution `place`'s email already makes.
+ */
+async function notifyDecision(mission: Mission, bid: Bid, accepted: boolean): Promise<void> {
+  const target = { id: mission.id, name: mission.name ?? "" };
+  await createNotification(
+    accepted
+      ? NewNotification.bidAccepted(bid.pilot.id, target)
+      : NewNotification.bidRejected(bid.pilot.id, target),
+  );
+  const pilot = await findUserByIdOrUndefined(bid.pilot.id);
+  if (pilot !== undefined) {
+    await emailService.sendBidDecision(
+      { email: pilot.email, username: pilot.username },
+      { ...target, location: mission.location },
+      bid.amount,
+      accepted,
+    );
+  }
 }
 
 /** Read-only lookup — may be served from cache, so never hand the result to `save()`. */

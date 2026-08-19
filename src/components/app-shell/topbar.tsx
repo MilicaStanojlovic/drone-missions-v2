@@ -46,9 +46,9 @@ export interface TopbarProps {
  * Authenticated app shell topbar (replaces `AppComponent`'s `<header class="nav">`
  * and its `logout()` method): brand mark, profile chip (username + role), and a
  * logout button, plus the `nav__links` row. Each role-specific link is added
- * by the phase that introduces its route, so the row currently holds only the
- * pilot's "My Bids" (Phase 3); "My Missions" / "New Mission" / "Browse" and
- * the admin section arrive with their own phases.
+ * by the phase that introduces its route, so the row currently holds the
+ * pilot's "My Bids" (Phase 3) and "My Jobs" (Phase 5); "My Missions" / "New
+ * Mission" / "Browse" and the admin section arrive with their own phases.
  *
  * Unlike `AuthService.logout()` (which is purely local — clears the token,
  * nothing else), this calls the already-ported `POST /api/v1/auth/logout`
@@ -91,15 +91,31 @@ export function Topbar({ username, role }: TopbarProps) {
                 `routerLinkActive` (no `exact` option on this link) is a prefix
                 match, hence `startsWith`. */}
             {role === "PILOT" && (
-              <Link
-                href="/my-bids"
-                className={cn(
-                  NAV_LINK,
-                  pathname.startsWith("/my-bids") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
-                )}
-              >
-                My Bids
-              </Link>
+              <>
+                <Link
+                  href="/my-bids"
+                  className={cn(
+                    NAV_LINK,
+                    pathname.startsWith("/my-bids") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                  )}
+                >
+                  My Bids
+                </Link>
+                {/* Phase 5's `/my-jobs`. The source header has no such link
+                    (it never had the page), so it takes the canvas's second
+                    half — "My Bids & Jobs" there is one button onto a tabbed
+                    list; here the two halves are two routes, so they are two
+                    links, side by side and in that order. */}
+                <Link
+                  href="/my-jobs"
+                  className={cn(
+                    NAV_LINK,
+                    pathname.startsWith("/my-jobs") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                  )}
+                >
+                  My Jobs
+                </Link>
+              </>
             )}
           </nav>
         </div>

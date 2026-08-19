@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { bid, mission, users, type BidStatus } from "@/db/schema";
 import type { Bid } from "./bid.types";
 
@@ -14,10 +14,18 @@ import type { Bid } from "./bid.types";
  * keeps that true here: without the join the mapper would be back to an N+1 of
  * mission/user lookups, which is exactly the shape the source removed.
  *
- * Phase-3 slice only. `findByMission_IdAndStatus` (the accept flow's loser
- * rejection, Phase 5) and the two aggregate projections `volume()` /
- * `topMissionsByBids()` (the admin overview, Phase 9) are deliberately not
- * ported here.
+ * The two aggregate projections `volume()` / `topMissionsByBids()` (the admin
+ * overview, Phase 9) are deliberately not ported here.
+ *
+ * ## Running inside a transaction
+ * `findById`, `findByMissionAndStatus` and `save` take an optional `tx`
+ * handle. `BidService.accept` is `@Transactional` in the source, where the
+ * repository calls join the ambient transaction invisibly; Drizzle has no
+ * ambient transaction, so the handle is threaded through explicitly and
+ * defaults to the pool when absent (see `dbFor` in `src/db/client.ts`). Every
+ * read a transactional write depends on — including `save`'s own read-back —
+ * must run on the same handle, or it would be answered by a different
+ * connection that cannot see the uncommitted rows.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/repository/BidRepository.java
@@ -89,8 +97,8 @@ function toBid(row: JoinedRow): Bid {
  * columns out of every bid list, and taking only `id`/`username` from `users`
  * means no password hash is ever loaded into a bid.
  */
-function selectBids() {
-  return getDb()
+function selectBids(tx?: DbHandle) {
+  return dbFor(tx)
     .select({
       bid: getTableColumns(bid),
       mission: { id: mission.id, name: mission.name },
@@ -106,9 +114,30 @@ function selectBids() {
  * `BidService.getBidOrThrow` calls it (`Optional.empty()` becomes
  * `undefined`).
  */
-export async function findById(id: number): Promise<Bid | undefined> {
-  const [row] = await selectBids().where(eq(bid.id, id));
+export async function findById(id: number, tx?: DbHandle): Promise<Bid | undefined> {
+  const [row] = await selectBids(tx).where(eq(bid.id, id));
   return row ? toBid(row) : undefined;
+}
+
+/**
+ * Every bid on a mission with a given status. Mirrors
+ * `findByMission_IdAndStatus` — the accept flow's "who else is still
+ * pending?" lookup, which is the one place a status is queried directly.
+ *
+ * No `ORDER BY`, because the derived Spring Data query declares none: the
+ * losers are all rejected, so the order they come back in is not observable.
+ * (`findByMissionOrderByCreatedAtDesc` above adds an id tiebreaker precisely
+ * because *its* order is displayed; this one's is not.)
+ */
+export async function findByMissionAndStatus(
+  missionId: number,
+  status: BidStatus,
+  tx?: DbHandle,
+): Promise<Bid[]> {
+  const rows = await selectBids(tx).where(
+    and(eq(bid.missionId, missionId), eq(bid.status, status)),
+  );
+  return rows.map(toBid);
 }
 
 /**
@@ -140,9 +169,18 @@ export async function findByMissionAndPilot(
  * monotonic, breaking the tie by id keeps "newest first" true rather than
  * arbitrary for bids placed inside the same clock tick, without reordering any
  * two rows the source already ordered.
+ *
+ * `tx` runs the read on a caller's open transaction — `MissionService.cancel`
+ * rejects every outstanding bid in the same transaction that cancels the
+ * mission, and must therefore see the rows as that transaction left them. The
+ * source gets this from `@Transactional` binding the repository to the
+ * ambient transaction; here the handle is passed explicitly.
  */
-export async function findByMissionOrderByCreatedAtDesc(missionId: number): Promise<Bid[]> {
-  const rows = await selectBids()
+export async function findByMissionOrderByCreatedAtDesc(
+  missionId: number,
+  tx?: DbHandle,
+): Promise<Bid[]> {
+  const rows = await selectBids(tx)
     .where(eq(bid.missionId, missionId))
     .orderBy(desc(bid.createdAt), desc(bid.id));
   return rows.map(toBid);
@@ -191,7 +229,7 @@ export async function findByPilotOrderByCreatedAtDesc(pilotId: number): Promise<
  * the write: `returning()` yields the bid columns only, and every caller (the
  * mapper above all) needs the mission and pilot names attached.
  */
-export async function save(input: BidWrite): Promise<Bid> {
+export async function save(input: BidWrite, tx?: DbHandle): Promise<Bid> {
   const now = new Date();
   const columns = {
     missionId: input.missionId,
@@ -203,13 +241,13 @@ export async function save(input: BidWrite): Promise<Bid> {
 
   let savedId: number;
   if (input.id === undefined || input.id === null) {
-    const [inserted] = await getDb()
+    const [inserted] = await dbFor(tx)
       .insert(bid)
       .values({ ...columns, createdAt: now, updatedAt: now })
       .returning({ id: bid.id });
     savedId = inserted.id;
   } else {
-    const [updated] = await getDb()
+    const [updated] = await dbFor(tx)
       .update(bid)
       .set({ ...columns, updatedAt: now })
       .where(eq(bid.id, input.id))
@@ -225,7 +263,9 @@ export async function save(input: BidWrite): Promise<Bid> {
     savedId = updated.id;
   }
 
-  const saved = await findById(savedId);
+  // On the caller's handle: inside a transaction the row this just wrote is
+  // invisible to every other connection until commit.
+  const saved = await findById(savedId, tx);
   if (!saved) {
     throw new Error(`Bid ${savedId} vanished immediately after being saved`);
   }

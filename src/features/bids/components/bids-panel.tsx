@@ -1,42 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { serverMessage } from "@/lib/api/client";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Toast, useToast } from "@/components/toast";
 import type { MissionStatus } from "@/features/missions/mission.types";
-import { placeBid, withdrawBid, type Bid } from "../bid.client";
+import { acceptBid, placeBid, withdrawBid, type Bid } from "../bid.client";
 
 /**
  * The mission detail page's bids aside — one panel with two faces, exactly as
  * the source template branches on `auth.isPilot`:
  *
- * - **Pilot — "Your bid":** their current bid (amount, note, won/lost marker,
- *   Withdraw while it is still pending) above the place/update form, or one of
- *   the two closed-for-bidding messages.
+ * - **Pilot — "Your bid":** the winning pilot's lifecycle card (`finishBlock`,
+ *   supplied by the parent), then their current bid (amount, note, won/lost
+ *   marker, Withdraw while it is still pending) above the place/update form,
+ *   or one of the two closed-for-bidding messages.
  * - **Anyone else — "Bids":** every bid on the mission, newest first, with the
- *   pilot's name, amount, note and status tag, plus the "N bids" count.
+ *   pilot's name, amount, note and status tag, plus the "N bids" count — and,
+ *   for the *owning* designer while nothing is awarded yet, an **Accept**
+ *   button per pending bid behind a confirm dialog.
  *
  * Ports the `<aside class="panel">` half of `mission-detail.component.html`,
  * its `.panel*` / `.mybid*` / `.bid*` / `.bidfield*` styles, and the "pilot
- * bidding" section of the component class (`myBid`, `deadlinePassed`,
- * `canBid`, `placeBid`, `withdrawBid`, `bidCountText`). It is a component of
+ * bidding" + "designer award" sections of the component class (`myBid`,
+ * `deadlinePassed`, `canBid`, `placeBid`, `withdrawBid`, `bidCountText`,
+ * `hasAward`, `firstName`, `askAccept`, `confirmAccept`). It is a component of
  * its own rather than more markup inside `MissionDetail` because it owns
- * genuinely local state — the two form fields and the in-flight flag — that
- * nothing else on the page reads; the *list* stays with the parent, which
- * needs `bids.length` for the telemetry tile and re-loads both mission and
- * bids after every action (`onChanged`, the source's `refresh()`).
+ * genuinely local state — the two form fields, the in-flight flag and the bid
+ * awaiting confirmation — that nothing else on the page reads; the *list*
+ * stays with the parent, which needs `bids.length` for the telemetry tile and
+ * re-loads both mission and bids after every action (`onChanged`, the source's
+ * `refresh()`).
  *
- * Deliberately NOT ported, because their APIs land later and a stubbed control
- * that 404s is worse parity than an absent one:
- * - the designer's **Accept** button and its confirm dialog, and with them
- *   `hasAward` / `firstName` / `askAccept` / `confirmAccept` — the award flow
- *   is Phase 5 (`POST /api/v1/bids/{id}/accept` does not exist yet). The
- *   ACCEPTED / REJECTED *renderings* below are ported: those statuses are set
- *   by the backend, so a bid can already arrive in one.
- * - the `isWinner` "finish" block (Start mission / Mark finished) that the
- *   source renders above the pilot's bid — `MissionService.start/complete`,
- *   Phase 5.
+ * The one part of the pilot's panel body that is *not* implemented here is the
+ * `isWinner` "finish" block (Start mission / Mark finished) the source renders
+ * above the pilot's bid: it belongs to the mission, not to a bid, so it is
+ * built by `MissionDetail` alongside the designer's Cancel and passed down as
+ * `finishBlock` — this panel only decides where it sits.
  *
  * SOURCE: drone-missions-frontend/.../components/mission-detail/mission-detail.component.{ts,html,css}
  */
@@ -51,6 +52,8 @@ export interface BidsPanelMission {
   status: MissionStatus;
   /** A `yyyy-MM-dd` calendar date, or null when the designer set none. */
   biddingDeadline?: string | null;
+  /** The pilot this mission was awarded to, once a bid has been accepted. */
+  awardedPilotId?: number | null;
 }
 
 export interface BidsPanelProps {
@@ -61,8 +64,23 @@ export interface BidsPanelProps {
    */
   bids: Bid[];
   isPilot: boolean;
+  /**
+   * The caller is the designer who owns this mission — the source's `isOwner`,
+   * computed by the parent because it is the one holding `mission.userId` and
+   * the decoded token. Only they get the Accept buttons; the server enforces
+   * the same rule, so this hides a control that would 403, it does not gate
+   * the award.
+   */
+  isOwner: boolean;
   /** Re-load mission + bids in place after a successful action (`refresh()`). */
   onChanged: () => void;
+  /**
+   * The winning pilot's mission-lifecycle card, rendered at the top of the
+   * pilot's panel body where the source's `.finish` block sits. Owned by
+   * `MissionDetail` (it is mission state, not bid state); nothing is rendered
+   * for the designer's face of the panel, or when the parent passes nothing.
+   */
+  finishBlock?: ReactNode;
 }
 
 const PANEL_EMPTY = "px-5 py-[34px] text-center text-[13.5px] text-[#93a1b0]";
@@ -73,10 +91,23 @@ const FIELD_INPUT =
 const MYBID_LABEL = "font-mono text-[9.5px] tracking-[0.08em] text-[#a2afbc] uppercase";
 const BID_TAG =
   "rounded-[20px] border border-[#dbe2ea] px-[7px] py-0.5 font-mono text-[9.5px] tracking-[0.08em] text-[#93a1b0]";
+/**
+ * The award button. Its violet is the canvas's awarded accent (`#7c5cff` and
+ * the `#f3f1ff` / `#ddd6ff` / `#6d4ff0` resting trio it pairs with there), the
+ * same palette the ACCEPTED tag and the `bid--accepted` row wash already use,
+ * so the whole award story on this panel reads in one colour.
+ */
+const BID_AWARD =
+  "mt-[11px] w-full cursor-pointer rounded-lg border border-[#ddd6ff] bg-[#f3f1ff] p-[9px] text-[13px] font-semibold text-[#6d4ff0] transition-colors hover:border-[#7c5cff] hover:bg-[#7c5cff] hover:text-white";
 
 /** "1 bid" / "3 bids". Ports `bidCountText`. */
 function bidCountText(count: number): string {
   return count === 1 ? "1 bid" : `${count} bids`;
+}
+
+/** "Maya Okonkwo" → "Maya", for the button's "Accept Maya's bid". Ports `firstName`. */
+function firstName(name: string): string {
+  return name.split(" ")[0];
 }
 
 /**
@@ -89,10 +120,19 @@ function deadlinePassed(mission: BidsPanelMission): boolean {
   return !!deadline && new Date() > new Date(deadline + "T23:59:59");
 }
 
-export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps) {
+export function BidsPanel({
+  mission,
+  bids,
+  isPilot,
+  isOwner,
+  onChanged,
+  finishBlock,
+}: BidsPanelProps) {
   const [bidAmount, setBidAmount] = useState("");
   const [bidMessage, setBidMessage] = useState("");
   const [bidBusy, setBidBusy] = useState(false);
+  /** The bid awaiting the designer's Accept confirmation, if any. Ports `pendingAccept`. */
+  const [pendingAccept, setPendingAccept] = useState<Bid | null>(null);
   const { toast, show } = useToast();
 
   /** The caller's own bid — for pilots the API returns only theirs (0/1 items). Ports `myBid`. */
@@ -100,6 +140,13 @@ export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps)
   const closed = deadlinePassed(mission);
   /** Ports `canBid`. */
   const canBid = isPilot && ["PUBLISHED", "BIDDING"].includes(mission.status) && !closed;
+  /**
+   * This mission has already been awarded, so no bid on it can still be
+   * accepted. Ports `hasAward` — including its belt-and-braces second test:
+   * an accepted bid in the list means the award happened even if the mission
+   * copy on screen is a beat stale, and vice versa.
+   */
+  const hasAward = mission.awardedPilotId != null || bids.some((bid) => bid.status === "ACCEPTED");
 
   function place(): void {
     if (bidBusy) {
@@ -156,6 +203,32 @@ export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps)
       });
   }
 
+  /**
+   * Awards the mission to the confirmed bid. Ports `confirmAccept`: the dialog
+   * closes first and the bid is read out of state before the call, so a second
+   * confirmation cannot re-fire it, and `onChanged()` runs on **failure too** —
+   * the usual reason a 409 comes back is that the mission was awarded (or the
+   * pilot suspended) since this page loaded, and re-reading is what replaces
+   * the now-wrong buttons with the truth behind the error message.
+   */
+  function confirmAccept(): void {
+    const bid = pendingAccept;
+    setPendingAccept(null);
+    if (!bid) {
+      return;
+    }
+    acceptBid(bid.id)
+      .then(() => {
+        show(`Awarded to ${bid.pilotName} — other bids rejected`, "#7c5cff");
+        onChanged();
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to accept bid", error);
+        show(serverMessage(error, "Could not accept the bid"), "#e04a3f");
+        onChanged();
+      });
+  }
+
   return (
     <>
       <aside className="bg-card overflow-hidden rounded-xl border border-[#e8edf2] shadow-[0_1px_2px_rgba(20,35,55,0.04),0_8px_24px_rgba(20,35,55,0.05)]">
@@ -165,6 +238,7 @@ export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps)
               <span className="text-foreground text-[15px] font-semibold">Your bid</span>
             </div>
             <div className="px-[18px] py-4">
+              {finishBlock}
               {myBid && (
                 <div className="mb-3.5 rounded-[10px] border border-[#e8edf2] bg-[#f7f9fb] px-[15px] py-3.5">
                   <div className={MYBID_LABEL}>Current bid</div>
@@ -288,6 +362,15 @@ export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps)
                         “{bid.message}”
                       </div>
                     )}
+                    {isOwner && !hasAward && bid.status === "PENDING" && (
+                      <button
+                        type="button"
+                        className={BID_AWARD}
+                        onClick={() => setPendingAccept(bid)}
+                      >
+                        Accept {firstName(bid.pilotName)}&apos;s bid
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -295,6 +378,20 @@ export function BidsPanel({ mission, bids, isPilot, onChanged }: BidsPanelProps)
           </>
         )}
       </aside>
+
+      <ConfirmDialog
+        open={pendingAccept !== null}
+        title="Accept this bid?"
+        message={
+          pendingAccept
+            ? `Accept ${pendingAccept.pilotName}’s bid of $${pendingAccept.amount}? All other bids will be rejected and the mission will be awarded.`
+            : ""
+        }
+        confirmText="Accept bid"
+        cancelText="Cancel"
+        onConfirm={confirmAccept}
+        onCancel={() => setPendingAccept(null)}
+      />
 
       <Toast toast={toast} />
     </>

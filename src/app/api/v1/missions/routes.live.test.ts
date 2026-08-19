@@ -1,14 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
-import { auditLog, mission, rating, users } from "@/db/schema";
+import { auditLog, bid, mission, notification, rating, users } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import type { UserRole } from "@/db/schema";
 import { getMissionDao } from "@/features/missions/mission.cache";
 import { POST as registerRoute } from "../auth/register/route";
+import { POST as placeBidRoute } from "../bids/mission/[missionId]/route";
+import { POST as acceptBidRoute } from "../bids/[id]/accept/route";
 import { GET as feedRoute, POST as createRoute } from "./route";
 import { GET as myMissionsRoute } from "./my-missions/route";
+import { GET as myJobsRoute } from "./my-jobs/route";
 import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
+import { POST as startRoute } from "./[id]/start/route";
+import { POST as completeRoute } from "./[id]/complete/route";
+import { POST as cancelRoute } from "./[id]/cancel/route";
 
 /**
  * Route-level **integration** suite for the phase-2 mission endpoints: the
@@ -31,7 +37,19 @@ import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from ".
  *   edit must never write a cached snapshot back over `status`;
  * - the audit rows the three mutations leave behind, and the
  *   `ON DELETE CASCADE` a mission delete relies on;
- * - the dynamic feed `where` (the ported `Specification`) as SQL.
+ * - the dynamic feed `where` (the ported `Specification`) as SQL;
+ * - the phase-5 lifecycle over real rows: `/start` and `/complete` walking one
+ *   awarded mission AWARDED -> IN_PROGRESS -> COMPLETED and auditing each step
+ *   while raising no notification at all, `/cancel` rejecting every
+ *   outstanding bid in the same transaction and telling the awarded pilot, and
+ *   the post-write cache eviction that makes each transition visible to the
+ *   very next read;
+ * - `/my-jobs` served off the caching DAO's own `byPilot` list key — a listing
+ *   that must both appear the moment a bid is accepted and survive the mission
+ *   leaving the open marketplace;
+ * - and the negative of the flagged plan-vs-source finding: reading a mission
+ *   whose `startTime` is long past never promotes it to IN_PROGRESS, because
+ *   the source has no such lazy transition.
  *
  * It lives in a separate file rather than in `routes.test.ts` because that
  * file's `vi.mock` of the mission service is module-scoped: a live-DB block
@@ -168,14 +186,92 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
     return body;
   }
 
+  /** A lifecycle POST as the client sends it: path plus token, no body. */
+  function postRequest(url: string, userId: number, role: UserRole): Request {
+    return new Request(url, { method: "POST", headers: authHeaders(userId, role) });
+  }
+
+  /** The context the bid-placement route matches — its segment is `missionId`. */
+  function missionContext(missionId: number) {
+    return { params: Promise.resolve({ missionId: String(missionId) }) };
+  }
+
+  /**
+   * Drives a mission all the way to AWARDED through the *real* bid endpoints,
+   * rather than writing the status and `awarded_pilot_id` straight into the
+   * table. The award is the precondition every lifecycle case needs, and
+   * faking it would also fake the cache state: `POST /bids/{id}/accept` is what
+   * invalidates the DAO's list keys (`/my-jobs` reads one of them), so a
+   * hand-written row would leave the caching decorator holding a pre-award
+   * snapshot that no production path could produce.
+   *
+   * Returns the winning bid and any losers, so a case can assert what the
+   * cancellation cascade does to each.
+   */
+  async function awardMission(
+    missionId: number,
+    winnerId: number,
+    loserIds: number[] = [],
+  ): Promise<{ winningBidId: number; losingBidIds: number[] }> {
+    const winning = await placeBid(missionId, winnerId, 1000);
+    const losing: number[] = [];
+    for (const loserId of loserIds) {
+      losing.push(await placeBid(missionId, loserId, 1200));
+    }
+    const accepted = await acceptBidRoute(
+      postRequest(`http://localhost/api/v1/bids/${winning}/accept`, designerId, "DESIGNER"),
+      idContext(winning),
+    );
+    expect(accepted.status).toBe(200);
+    return { winningBidId: winning, losingBidIds: losing };
+  }
+
+  /** Places one bid through `POST /api/v1/bids/mission/{missionId}` and returns its id. */
+  async function placeBid(missionId: number, pilotId: number, amount: number): Promise<number> {
+    const response = await placeBidRoute(
+      jsonRequest(
+        `http://localhost/api/v1/bids/mission/${missionId}`,
+        "POST",
+        { amount, message: `Bid from ${pilotId}` },
+        pilotId,
+        "PILOT",
+      ),
+      missionContext(missionId),
+    );
+    const body = await response.json();
+    // 200, not 201: placing a bid is an upsert (`bid_mission_pilot_unique`),
+    // so the source returns the bid rather than creating a new resource.
+    expect(response.status).toBe(200);
+    return body.id as number;
+  }
+
+  /** Every audit row written about one mission, in no particular order. */
+  async function auditRowsFor(missionId: number) {
+    return getDb()
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.targetType, "MISSION"), eq(auditLog.targetId, missionId)));
+  }
+
+  /** Every notification raised for one user about one mission. */
+  async function notificationsFor(userId: number, missionId: number) {
+    return getDb()
+      .select()
+      .from(notification)
+      .where(and(eq(notification.userId, userId), eq(notification.missionId, missionId)));
+  }
+
   let designerId: number;
   let otherDesignerId: number;
   let pilotId: number;
+  let otherPilotId: number;
 
   beforeAll(async () => {
     designerId = await registerTestUser("DESIGNER", "owner");
     otherDesignerId = await registerTestUser("DESIGNER", "stranger");
     pilotId = await registerTestUser("PILOT", "pilot");
+    // The losing bidder / the pilot with no claim on someone else's job.
+    otherPilotId = await registerTestUser("PILOT", "other-pilot");
   });
 
   afterAll(async () => {
@@ -702,6 +798,523 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
       expect(await getDb().select().from(mission).where(eq(mission.id, created.id))).toHaveLength(
         1,
       );
+    });
+  });
+
+  describe("the lifecycle endpoints over real rows", () => {
+    /**
+     * A mission a pilot can still bid on: the shared `missionPayload` deadline
+     * is a fixed near-term day, and these fixtures must keep working long after
+     * it passes (`BidService` refuses a bid past the deadline).
+     */
+    async function biddableMission(name: string) {
+      return createMission(designerId, {
+        name: `${name} ${runId}`,
+        startTime: localInstant(2030, 9, 1, 8),
+        endTime: localInstant(2030, 9, 1, 10),
+        biddingDeadline: "2030-08-25",
+      });
+    }
+
+    /** An awarded mission plus its winning pilot — the state every case starts from. */
+    async function awardedMission(name: string, loserIds: number[] = []) {
+      const created = await biddableMission(name);
+      const bids = await awardMission(created.id, pilotId, loserIds);
+      return { ...created, ...bids };
+    }
+
+    describe("POST /api/v1/missions/{id}/start", () => {
+      it("moves an awarded mission to IN_PROGRESS, audits it, notifies nobody, and is visible to the next read", async () => {
+        const awarded = await awardedMission("Startable");
+        // Warm the entity cache with the pre-start row, so the last assertion
+        // is really about the write path's eviction and not about a cold cache.
+        await detailRoute(
+          getRequest(`http://localhost/api/v1/missions/${awarded.id}`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        const response = await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({
+          id: awarded.id,
+          status: "IN_PROGRESS",
+          awardedPilotId: pilotId,
+          userId: designerId,
+        });
+
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("IN_PROGRESS");
+        expect(row.awardedPilotId).toBe(pilotId);
+
+        // Actored by the *pilot*, not the designer — `NewAuditEntry.missionStarted`.
+        const started = (await auditRowsFor(awarded.id)).filter(
+          (entry) => entry.action === "MISSION_STARTED",
+        );
+        expect(started).toHaveLength(1);
+        expect(started[0]).toMatchObject({
+          actorId: pilotId,
+          actorRole: "PILOT",
+          targetType: "MISSION",
+          details: `"Startable ${runId}"`,
+        });
+
+        // No notification and no email: the source announces only cancellation.
+        expect(await notificationsFor(designerId, awarded.id)).toEqual([]);
+        const pilotNotes = await notificationsFor(pilotId, awarded.id);
+        expect(pilotNotes.map((note) => note.type)).toEqual(["BID_ACCEPTED"]);
+
+        const detail = await detailRoute(
+          getRequest(`http://localhost/api/v1/missions/${awarded.id}`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+        expect((await detail.json()).status).toBe("IN_PROGRESS");
+      });
+
+      it("refuses a pilot who is not the awarded one with 403 and leaves the mission AWARDED", async () => {
+        const awarded = await awardedMission("Not your job");
+
+        const response = await startRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${awarded.id}/start`,
+            otherPilotId,
+            "PILOT",
+          ),
+          idContext(awarded.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(403);
+        expect(body.message).toBe(`You are not allowed to modify mission ${awarded.id}`);
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("AWARDED");
+      });
+
+      it("409s on a mission that was never awarded, naming the status it refused", async () => {
+        const published = await biddableMission("Never awarded");
+        // A pilot with no claim on it at all: the awarded-pilot guard fires
+        // first, so this is a 403 rather than the conflict...
+        const strangerResponse = await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${published.id}/start`, pilotId, "PILOT"),
+          idContext(published.id),
+        );
+        expect(strangerResponse.status).toBe(403);
+
+        // ...and the conflict is what the awarded pilot of a *reset* mission
+        // sees. Written directly, because no endpoint moves a mission back.
+        await getDb()
+          .update(mission)
+          .set({ status: "PUBLISHED", awardedPilotId: pilotId })
+          .where(eq(mission.id, published.id));
+
+        const response = await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${published.id}/start`, pilotId, "PILOT"),
+          idContext(published.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.message).toBe(
+          `Mission ${published.id} cannot be started from status PUBLISHED`,
+        );
+      });
+
+      it("409s on a second start, because the mission is already underway", async () => {
+        const awarded = await awardedMission("Started once");
+        expect(
+          (
+            await startRoute(
+              postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+              idContext(awarded.id),
+            )
+          ).status,
+        ).toBe(200);
+
+        const response = await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        expect(response.status).toBe(409);
+        expect((await response.json()).message).toBe(
+          `Mission ${awarded.id} cannot be started from status IN_PROGRESS`,
+        );
+      });
+
+      it("403s while the awarded pilot's own account is suspended, and works again once it is lifted", async () => {
+        const frozenPilot = await registerTestUser("PILOT", "frozen");
+        const created = await biddableMission("Frozen pilot");
+        await awardMission(created.id, frozenPilot);
+        await getDb().update(users).set({ suspended: true }).where(eq(users.id, frozenPilot));
+
+        const response = await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${created.id}/start`, frozenPilot, "PILOT"),
+          idContext(created.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(403);
+        expect(body.message).toBe("This account is suspended and cannot perform this action");
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, created.id));
+        expect(row.status).toBe("AWARDED");
+
+        await getDb().update(users).set({ suspended: false }).where(eq(users.id, frozenPilot));
+        expect(
+          (
+            await startRoute(
+              postRequest(
+                `http://localhost/api/v1/missions/${created.id}/start`,
+                frozenPilot,
+                "PILOT",
+              ),
+              idContext(created.id),
+            )
+          ).status,
+        ).toBe(200);
+      });
+
+      it("never advances a mission on read alone, however long its start time has passed", async () => {
+        // The flagged plan-vs-source finding, pinned from the outside: the
+        // phase spec claimed AWARDED -> IN_PROGRESS happens lazily once
+        // `startTime` is behind us. The Spring source has no such path, so a
+        // read of an overdue awarded mission must still say AWARDED.
+        const awarded = await awardedMission("Overdue but idle");
+        await getDb()
+          .update(mission)
+          .set({
+            startTime: new Date("2020-01-01T08:00:00Z"),
+            endTime: new Date("2020-01-01T10:00:00Z"),
+          })
+          .where(eq(mission.id, awarded.id));
+        getMissionDao().invalidate(awarded.id);
+
+        const detail = await detailRoute(
+          getRequest(`http://localhost/api/v1/missions/${awarded.id}`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+        expect((await detail.json()).status).toBe("AWARDED");
+
+        const jobs = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", pilotId, "PILOT"),
+          listContext,
+        );
+        const listed = (await jobs.json()).find((m: { id: number }) => m.id === awarded.id);
+        expect(listed.status).toBe("AWARDED");
+
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("AWARDED");
+        expect(
+          (await auditRowsFor(awarded.id)).some((entry) => entry.action === "MISSION_STARTED"),
+        ).toBe(false);
+      });
+    });
+
+    describe("POST /api/v1/missions/{id}/complete", () => {
+      it("walks the mission AWARDED -> IN_PROGRESS -> COMPLETED and audits the finish", async () => {
+        const awarded = await awardedMission("Completable");
+        await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        const response = await completeRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/complete`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({ id: awarded.id, status: "COMPLETED", awardedPilotId: pilotId });
+
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("COMPLETED");
+
+        const actions = (await auditRowsFor(awarded.id)).map((entry) => entry.action).sort();
+        expect(actions).toEqual(["MISSION_COMPLETED", "MISSION_CREATED", "MISSION_STARTED"]);
+        const [completed] = (await auditRowsFor(awarded.id)).filter(
+          (entry) => entry.action === "MISSION_COMPLETED",
+        );
+        expect(completed).toMatchObject({
+          actorId: pilotId,
+          actorRole: "PILOT",
+          details: `"Completable ${runId}"`,
+        });
+
+        // Still nothing announced — the same silence as `start`.
+        expect(await notificationsFor(designerId, awarded.id)).toEqual([]);
+      });
+
+      it("409s on a mission that was awarded but never started", async () => {
+        const awarded = await awardedMission("Not started");
+
+        const response = await completeRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/complete`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        expect(response.status).toBe(409);
+        expect((await response.json()).message).toBe(
+          `Mission ${awarded.id} cannot be completed from status AWARDED`,
+        );
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("AWARDED");
+      });
+
+      it("refuses the designer with 403 — completing is the pilot's act (hasRole('PILOT'))", async () => {
+        const awarded = await awardedMission("Designer cannot finish");
+        await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        const response = await completeRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${awarded.id}/complete`,
+            designerId,
+            "DESIGNER",
+          ),
+          idContext(awarded.id),
+        );
+
+        expect(response.status).toBe(403);
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("IN_PROGRESS");
+      });
+    });
+
+    describe("POST /api/v1/missions/{id}/cancel", () => {
+      it("cancels an awarded mission, rejects every outstanding bid, and tells the awarded pilot", async () => {
+        const awarded = await awardedMission("Cancellable", [otherPilotId]);
+
+        const response = await cancelRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${awarded.id}/cancel`,
+            designerId,
+            "DESIGNER",
+          ),
+          idContext(awarded.id),
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({ id: awarded.id, status: "CANCELLED" });
+
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("CANCELLED");
+        // The award is not undone — the row still records who had won it.
+        expect(row.awardedPilotId).toBe(pilotId);
+
+        // Both the winner's ACCEPTED bid and the loser's already-REJECTED one
+        // end up REJECTED: "outstanding" covers PENDING *and* ACCEPTED.
+        const rows = await getDb().select().from(bid).where(eq(bid.missionId, awarded.id));
+        expect(rows.map((r) => r.status)).toEqual(["REJECTED", "REJECTED"]);
+
+        // Only the awarded pilot is told; the loser already had their rejection.
+        const winnerNotes = await notificationsFor(pilotId, awarded.id);
+        expect(winnerNotes.map((note) => note.type).sort()).toEqual([
+          "BID_ACCEPTED",
+          "MISSION_CANCELLED",
+        ]);
+        const [cancelledNote] = winnerNotes.filter((note) => note.type === "MISSION_CANCELLED");
+        expect(cancelledNote).toMatchObject({
+          title: "Mission cancelled",
+          message: `"Cancellable ${runId}" was cancelled by the designer.`,
+        });
+        expect(
+          (await notificationsFor(otherPilotId, awarded.id)).map((note) => note.type),
+        ).toEqual(["BID_REJECTED"]);
+
+        // One row per intent: the rejected bids are not audited.
+        const cancelAudits = (await auditRowsFor(awarded.id)).filter(
+          (entry) => entry.action === "MISSION_CANCELLED",
+        );
+        expect(cancelAudits).toHaveLength(1);
+        expect(cancelAudits[0]).toMatchObject({
+          actorId: designerId,
+          actorRole: "DESIGNER",
+          targetType: "MISSION",
+          details: `"Cancellable ${runId}"`,
+        });
+
+        const detail = await detailRoute(
+          getRequest(`http://localhost/api/v1/missions/${awarded.id}`, designerId, "DESIGNER"),
+          idContext(awarded.id),
+        );
+        expect((await detail.json()).status).toBe("CANCELLED");
+      });
+
+      it("cancels a mission that was never awarded, rejecting its pending bids and notifying nobody", async () => {
+        const target = await biddableMission("Cancelled early");
+        const pending = await placeBid(target.id, pilotId, 400);
+
+        const response = await cancelRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${target.id}/cancel`,
+            designerId,
+            "DESIGNER",
+          ),
+          idContext(target.id),
+        );
+
+        expect(response.status).toBe(200);
+        const [row] = await getDb().select().from(bid).where(eq(bid.id, pending));
+        expect(row.status).toBe("REJECTED");
+        // `awarded_pilot_id` is null, so there is no one to announce it to.
+        expect(await notificationsFor(pilotId, target.id)).toEqual([]);
+      });
+
+      it("refuses a designer who does not own the mission with 403 and changes nothing", async () => {
+        const awarded = await awardedMission("Not yours to cancel");
+
+        const response = await cancelRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${awarded.id}/cancel`,
+            otherDesignerId,
+            "DESIGNER",
+          ),
+          idContext(awarded.id),
+        );
+
+        expect(response.status).toBe(403);
+        const [row] = await getDb().select().from(mission).where(eq(mission.id, awarded.id));
+        expect(row.status).toBe("AWARDED");
+        const [bidRow] = await getDb()
+          .select()
+          .from(bid)
+          .where(eq(bid.id, awarded.winningBidId));
+        expect(bidRow.status).toBe("ACCEPTED");
+      });
+
+      it("409s on an already-completed mission and on a second cancellation", async () => {
+        const awarded = await awardedMission("Finished then cancelled");
+        await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/start`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+        await completeRoute(
+          postRequest(`http://localhost/api/v1/missions/${awarded.id}/complete`, pilotId, "PILOT"),
+          idContext(awarded.id),
+        );
+
+        const response = await cancelRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${awarded.id}/cancel`,
+            designerId,
+            "DESIGNER",
+          ),
+          idContext(awarded.id),
+        );
+        expect(response.status).toBe(409);
+        expect((await response.json()).message).toBe(
+          `Mission ${awarded.id} cannot be cancelled from status COMPLETED`,
+        );
+
+        const second = await awardedMission("Cancelled twice");
+        expect(
+          (
+            await cancelRoute(
+              postRequest(
+                `http://localhost/api/v1/missions/${second.id}/cancel`,
+                designerId,
+                "DESIGNER",
+              ),
+              idContext(second.id),
+            )
+          ).status,
+        ).toBe(200);
+        const repeat = await cancelRoute(
+          postRequest(
+            `http://localhost/api/v1/missions/${second.id}/cancel`,
+            designerId,
+            "DESIGNER",
+          ),
+          idContext(second.id),
+        );
+        expect(repeat.status).toBe(409);
+        expect((await repeat.json()).message).toBe(
+          `Mission ${second.id} cannot be cancelled from status CANCELLED`,
+        );
+      });
+    });
+
+    describe("GET /api/v1/missions/my-jobs", () => {
+      it("lists a mission the moment it is awarded and keeps it through every later status", async () => {
+        const jobPilot = await registerTestUser("PILOT", "jobs");
+        const before = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", jobPilot, "PILOT"),
+          listContext,
+        );
+        expect(before.status).toBe(200);
+        expect(await before.json()).toEqual([]);
+
+        const created = await biddableMission("Jobs listing");
+        await awardMission(created.id, jobPilot);
+
+        // The accept wrote the mission, which invalidates the DAO's list keys —
+        // so the pilot's jobs list already has it, with no cache warm-up.
+        const awardedList = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", jobPilot, "PILOT"),
+          listContext,
+        );
+        const awardedBody = await awardedList.json();
+        expect(awardedBody.map((m: { id: number }) => m.id)).toEqual([created.id]);
+        expect(awardedBody[0]).toMatchObject({
+          status: "AWARDED",
+          awardedPilotId: jobPilot,
+          // Off the designer join and the ratings aggregate, exactly as the
+          // feed's rows are — `toResponses` is the same call.
+          designerName: "mission-owner",
+          designerRating: 0,
+          designerRatingCount: 0,
+        });
+
+        await startRoute(
+          postRequest(`http://localhost/api/v1/missions/${created.id}/start`, jobPilot, "PILOT"),
+          idContext(created.id),
+        );
+        await completeRoute(
+          postRequest(`http://localhost/api/v1/missions/${created.id}/complete`, jobPilot, "PILOT"),
+          idContext(created.id),
+        );
+
+        // COMPLETED is outside the open statuses, so the mission has left the
+        // marketplace — but a job is not a listing, and it stays.
+        const after = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", jobPilot, "PILOT"),
+          listContext,
+        );
+        const afterBody = await after.json();
+        expect(afterBody.map((m: { id: number }) => m.id)).toEqual([created.id]);
+        expect(afterBody[0].status).toBe("COMPLETED");
+      });
+
+      it("shows a pilot only their own jobs, and refuses a designer with 403", async () => {
+        const mine = await registerTestUser("PILOT", "jobs-mine");
+        const theirs = await registerTestUser("PILOT", "jobs-theirs");
+        const myJob = await biddableMission("My job");
+        const theirJob = await biddableMission("Their job");
+        await awardMission(myJob.id, mine);
+        await awardMission(theirJob.id, theirs);
+
+        const response = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", mine, "PILOT"),
+          listContext,
+        );
+        expect((await response.json()).map((m: { id: number }) => m.id)).toEqual([myJob.id]);
+
+        // Stricter than `/my-missions`, which is `isAuthenticated()`: the
+        // source guards this one with `hasRole('PILOT')`.
+        const designerResponse = await myJobsRoute(
+          getRequest("http://localhost/api/v1/missions/my-jobs", designerId, "DESIGNER"),
+          listContext,
+        );
+        expect(designerResponse.status).toBe(403);
+        expect((await designerResponse.json()).status).toBe("FORBIDDEN");
+      });
     });
   });
 });
