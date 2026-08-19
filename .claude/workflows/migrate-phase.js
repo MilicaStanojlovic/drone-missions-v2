@@ -138,7 +138,8 @@ let test = null;
 let attempt = 0;
 
 while (true) {
-  review = await runAgent(
+  const [reviewR, testR] = await parallel([
+    () => runAgent(
     `${role("reviewer")}
 
 Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${TARGET} (git diff develop...HEAD, plus untracked files; if develop does not exist yet, review the whole tree). The phase's plan/checklist is ${planFile}; its spec is in MIGRATION_PLAN.md. Compare ported behavior against the ORIGINAL source in ${BACKEND} and ${FRONTEND}. Return structured output: green=true only if your verdict is merge-ready, and put your full findings report (or "merge-ready" summary) in report.`,
@@ -149,9 +150,8 @@ Review the cumulative work of migration phase "${phaseTitle || phaseSlug}" in ${
       label: `review#${attempt + 1}`,
       schema: VERDICT_SCHEMA,
     },
-  );
-
-  test = await runAgent(
+  ),
+    () => runAgent(
     `${role("tester")}
 
 Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "Done when" criteria: ${doneWhen || "see the phase section in MIGRATION_PLAN.md"}. Its checklist is ${planFile}. Return structured output: green=true only if your verdict is all-green (environment-caused skips allowed but must be listed in report), and put the full per-check report in report.`,
@@ -161,7 +161,10 @@ Verify migration phase "${phaseTitle || phaseSlug}" in ${TARGET}. The phase's "D
       label: `test#${attempt + 1}`,
       schema: VERDICT_SCHEMA,
     },
-  );
+  ),
+  ]);
+  review = reviewR ?? { green: false, report: "review agent failed to return a result" };
+  test = testR ?? { green: false, report: "tester agent failed to return a result" };
 
   if (review.green && test.green) {
     return {
