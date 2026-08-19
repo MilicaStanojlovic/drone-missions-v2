@@ -1,5 +1,6 @@
 import "server-only";
 import type { DbHandle } from "@/db/client";
+import type { MissionStatus } from "@/db/schema";
 import { TtlCache, formatCacheStats, type CacheStats, type Clock } from "@/lib/cache";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -85,10 +86,11 @@ import type { Geofence, Mission, MissionWrite, Waypoint } from "./mission.types"
  * is what lets the cache be swapped in without a single call site changing.
  *
  * The methods the source declares but this port does not yet have queries for
- * (`findOverdue`, `searchAll`, `countByStatus`) are absent rather than
- * stubbed; the phases that add those queries add them here too. All three are
- * *uncached* pass-throughs in the source, so nothing about the caching
- * semantics is deferred with them.
+ * (`searchAll`, `countByStatus`) are absent rather than stubbed; the phases
+ * that add those queries add them here too. Both are *uncached* pass-throughs
+ * in the source, so nothing about the caching semantics is deferred with them
+ * — as was true of `findOverdue`, which Phase 8 has since added below in
+ * exactly that form.
  *
  * `findByAwardedPilotId` is not in that group and never was: the source
  * caches it, under its own `OwnerKey("byPilot", …)`, exactly as it caches
@@ -107,6 +109,11 @@ export interface MissionDao {
   findByUserId(userId: number): Promise<Mission[]>;
   /** Missions awarded to this pilot. */
   findByAwardedPilotId(pilotId: number): Promise<Mission[]>;
+  /**
+   * Missions with a pilot on them whose flight window has ended — the overdue
+   * sweep's candidates. Never cached, in either source decorator.
+   */
+  findOverdue(statuses: readonly MissionStatus[], endedBefore: Date): Promise<Mission[]>;
   /**
    * Drop every cached list. For moderation events that change feed membership
    * without a mission write — suspending a designer hides their missions, but
@@ -332,6 +339,18 @@ export class CachingMissionDao implements MissionDao {
   }
 
   /**
+   * Not cached: a once-a-day sweep gains nothing and would only add
+   * invalidation surface. A pure pass-through — it neither reads from nor
+   * populates either cache, so the missions it returns are always freshly
+   * loaded and no entry is created that a later write would have to evict.
+   * Both source decorators (`CachingMissionDao`, `SpringCacheMissionDao`) do
+   * exactly this.
+   */
+  async findOverdue(statuses: readonly MissionStatus[], endedBefore: Date): Promise<Mission[]> {
+    return this.delegate.findOverdue(statuses, endedBefore);
+  }
+
+  /**
    * Feed membership changed without a mission write (a designer was suspended
    * or reactivated). Only the id arrays go; the entity rows are still correct.
    */
@@ -460,6 +479,7 @@ const uncachedMissionDao: MissionDao = {
   findOpen: queries.findOpen,
   findByUserId: queries.findByUserId,
   findByAwardedPilotId: queries.findByAwardedPilotId,
+  findOverdue: queries.findOverdue,
   invalidateLists: () => {},
   invalidate: () => {},
   save: queries.save,
