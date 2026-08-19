@@ -1,28 +1,28 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
+import { MissionList } from "@/features/missions/components/mission-list";
 
 export const metadata: Metadata = {
   title: "Missions — Drone Missions",
 };
 
 /**
- * `/missions` — the PILOT role home (see `roleHomePath` in
- * `features/auth/auth.client.ts`). Placeholder only: this phase (Phase 1 —
- * Auth & current user) is limited to authentication and the `(app)` shell
- * itself, so there is nothing mission-related to render yet. Exists purely
- * so the `(app)` route group has a real page to mount for a PILOT visitor —
- * without one, Next never renders `(app)/layout.tsx` for this segment tree
- * at all, which would leave its auth guard, profile-chip fetch, and the
- * `Topbar`'s logout button unreachable by navigation and therefore
- * untestable end-to-end.
+ * `/missions` — the open marketplace feed, and the PILOT role home (see
+ * `roleHomePath` in `features/auth/auth.client.ts`). Mirrors the Angular
+ * route `{ path: 'missions', component: MissionListComponent, canActivate:
+ * [authGuard] }`: `(app)/layout.tsx` is the `authGuard`, and `MissionList`
+ * without `mine` is the component in the mode that route's (absent) `data:
+ * { mine: true }` flag leaves it in.
  *
- * Replaced with the real pilot mission browse/list view by the missions
- * phase (see `MIGRATION_PLAN.md`).
+ * The feed's filters live in the query string (`?keyword&location&date`), so
+ * `MissionList` reads them with `useSearchParams` — which needs a Suspense
+ * boundary above it for Next to render this route's shell without waiting on
+ * the URL.
  */
 export default function MissionsPage() {
   return (
-    <div className="mx-auto max-w-[1240px] p-8">
-      <h1 className="text-foreground text-xl font-semibold">Missions</h1>
-      <p className="text-muted-foreground mt-2 text-sm">Coming soon.</p>
-    </div>
+    <Suspense>
+      <MissionList />
+    </Suspense>
   );
 }

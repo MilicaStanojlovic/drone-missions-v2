@@ -131,6 +131,16 @@ export function isLoggedIn(): boolean {
   return typeof exp !== "number" || exp * 1000 > Date.now();
 }
 
+/**
+ * Current user's id, read from the token's `sub` claim (which the server
+ * mints as the id in string form — see `src/lib/auth/jwt.ts`). Null when
+ * logged out. Mirrors `AuthService.userId`, `Number(...)` cast included.
+ */
+export function getUserId(): number | null {
+  const sub = decodeClaims()?.["sub"];
+  return sub != null ? Number(sub) : null;
+}
+
 /** Current user's role, read from the token's `role` claim. Mirrors `AuthService.role`. */
 export function getRole(): UserRole | null {
   const role = decodeClaims()?.["role"];

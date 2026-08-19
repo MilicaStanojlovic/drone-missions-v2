@@ -83,6 +83,29 @@ export const envSchema = z.object({
   MAIL_FROM: z.string().min(1).default("DroneMissions <no-reply@dronemissions.app>"),
   RESEND_API_KEY: z.string().min(1).optional(),
 
+  // --- Mission cache (app.cache.mission.*) ---
+  // Ports `MissionCacheProperties`, defaults and all. `enabled=false` is not a
+  // runtime branch: it makes `getMissionDao()` return the uncached query module
+  // itself, exactly as the Spring config never creates the decorator bean.
+  // The TTL is milliseconds here rather than Spring's `5m`/`PT5M` Duration
+  // string, matching JWT_EXPIRATION_MS above.
+  MISSION_CACHE_ENABLED: booleanFromEnv(true),
+  MISSION_CACHE_TTL_MS: z.coerce
+    .number({ error: "MISSION_CACHE_TTL_MS must be a number" })
+    .int("MISSION_CACHE_TTL_MS must be an integer")
+    .positive("MISSION_CACHE_TTL_MS must be positive")
+    .default(300000),
+  MISSION_CACHE_MAX_SIZE: z.coerce
+    .number({ error: "MISSION_CACHE_MAX_SIZE must be a number" })
+    .int("MISSION_CACHE_MAX_SIZE must be an integer")
+    .positive("MISSION_CACHE_MAX_SIZE must be positive")
+    .default(1000),
+  MISSION_CACHE_LIST_MAX_SIZE: z.coerce
+    .number({ error: "MISSION_CACHE_LIST_MAX_SIZE must be a number" })
+    .int("MISSION_CACHE_LIST_MAX_SIZE must be an integer")
+    .positive("MISSION_CACHE_LIST_MAX_SIZE must be positive")
+    .default(200),
+
   // --- Server port (server.port) ---
   PORT: z.coerce
     .number({ error: "PORT must be a number" })

@@ -2,7 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
-import { record, userLoggedIn, userRegistered, type AuditActorUser } from "./audit";
+import {
+  missionCreated,
+  missionDeleted,
+  missionUpdated,
+  record,
+  userLoggedIn,
+  userRegistered,
+  type AuditActorUser,
+} from "./audit";
 
 /**
  * Vitest suite for `audit.ts`.
@@ -19,6 +27,60 @@ import { record, userLoggedIn, userRegistered, type AuditActorUser } from "./aud
  * .../business/service/audit/NewAuditEntry.java.
  */
 const hasDb = Boolean(process.env.DATABASE_URL);
+
+/**
+ * The entry factories are pure functions, so they need no database — these
+ * mirror the mission cases of `NewAuditEntryTest`
+ * (`designerFactoriesPairRoleActionAndNameSnapshot`, plus the
+ * updated/deleted actions). Its remaining cases belong to factories this
+ * phase has not ported: the pilot/moderation mission ones (Phases 5/7), the
+ * bid ones (Phase 3), the rating one (Phase 6), and the admin user ones
+ * (Phase 7). `userFactoriesTargetTheUserAndSnapshotTheUsername`'s
+ * `userSuspended`/`userReactivated` half is Phase 7 too; the self-actored
+ * `selfActionsCarryTheUsersOwnRole` case is covered live below.
+ *
+ * `actorIdIsMandatory` has no port: the Java record enforces it with
+ * `Objects.requireNonNull` because a caller can pass a null `Long`, whereas
+ * `NewAuditEntry.actorId` is a non-nullable `number` here and the compiler
+ * rejects the call outright.
+ *
+ * SOURCE: drone-missions-backend/.../business/service/audit/NewAuditEntryTest.java
+ */
+describe("mission audit factories", () => {
+  const mission = { id: 4, name: "Orchard survey" };
+
+  it("designerFactoriesPairRoleActionAndNameSnapshot — missionCreated", () => {
+    expect(missionCreated(7, mission)).toEqual({
+      actorId: 7,
+      actorRole: "DESIGNER",
+      action: "MISSION_CREATED",
+      targetType: "MISSION",
+      targetId: 4,
+      details: '"Orchard survey"',
+    });
+  });
+
+  it("missionUpdated and missionDeleted keep the designer role and target the mission", () => {
+    expect(missionUpdated(7, mission)).toMatchObject({
+      actorRole: "DESIGNER",
+      action: "MISSION_UPDATED",
+      targetType: "MISSION",
+      targetId: 4,
+    });
+    expect(missionDeleted(7, mission)).toMatchObject({
+      actorRole: "DESIGNER",
+      action: "MISSION_DELETED",
+      targetId: 4,
+      details: '"Orchard survey"',
+    });
+  });
+
+  it("renders an unnamed mission the way String.formatted(null) does", () => {
+    // `mission.name` is a nullable column; Java's `"\"%s\"".formatted(null)`
+    // yields the literal `"null"`, and so does this.
+    expect(missionCreated(7, { id: 4, name: null }).details).toBe('"null"');
+  });
+});
 
 describe.runIf(hasDb)("audit.ts (live DB)", () => {
   // A fresh user per test run (unique email) so reruns against the same
