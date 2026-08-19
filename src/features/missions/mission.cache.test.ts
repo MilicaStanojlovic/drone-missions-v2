@@ -96,6 +96,11 @@ function fakeDelegate() {
     findOpen: vi.fn<MissionDao["findOpen"]>(async () => []),
     findByUserId: vi.fn<MissionDao["findByUserId"]>(async () => []),
     findByAwardedPilotId: vi.fn<MissionDao["findByAwardedPilotId"]>(async () => []),
+    searchAll: vi.fn<MissionDao["searchAll"]>(async (_pattern, request) => ({
+      content: [],
+      request,
+      totalElements: 0,
+    })),
     invalidateLists: vi.fn<MissionDao["invalidateLists"]>(),
     invalidate: vi.fn<MissionDao["invalidate"]>(),
     save: vi.fn<MissionDao["save"]>(),
@@ -418,5 +423,36 @@ describe("CachingMissionDao — concurrency and null ids", () => {
 
     expect(delegate.findById).not.toHaveBeenCalled();
     expect(delegate.findFresh).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The admin listing is one of the source's explicitly *uncached* methods
+ * ("a rare admin-only view is not worth widening the invalidation surface").
+ * Both halves of that are behaviour worth pinning: the delegate is asked every
+ * time, and the rows it returns never reach either cache — otherwise the admin
+ * list, which deliberately includes HIDDEN missions and drafts, would seed
+ * entries the open feed could then serve.
+ */
+describe("CachingMissionDao — searchAll is not cached", () => {
+  const request = { page: 0, size: 20 };
+
+  it("hits the delegate on every call", async () => {
+    delegate.searchAll.mockResolvedValue({ content: [mission(1)], request, totalElements: 1 });
+
+    await cache.searchAll("%orchard%", request);
+    await cache.searchAll("%orchard%", request);
+
+    expect(delegate.searchAll).toHaveBeenCalledTimes(2);
+    expect(delegate.searchAll).toHaveBeenLastCalledWith("%orchard%", request);
+  });
+
+  it("does not populate the entity or list caches", async () => {
+    delegate.searchAll.mockResolvedValue({ content: [mission(1)], request, totalElements: 1 });
+
+    await cache.searchAll(null, request);
+
+    expect(cache.entityStats().size).toBe(0);
+    expect(cache.listStats().size).toBe(0);
   });
 });

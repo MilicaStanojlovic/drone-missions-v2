@@ -36,6 +36,18 @@ const NAV_LINK =
 const NAV_LINK_RESTING = "text-[#5c6b7a] hover:bg-[#f0f3f7] hover:text-foreground";
 const NAV_LINK_ACTIVE = "text-primary bg-[#eef3ff]";
 
+/**
+ * The admin section nav, in the source's order. Kept as data rather than four
+ * hand-written `<Link>`s because every entry differs only in href and label —
+ * the four `@if (auth.isAdmin)` anchors of `app.component.html`.
+ */
+const ADMIN_NAV = [
+  { href: "/admin/overview", label: "Overview" },
+  { href: "/admin/missions", label: "Missions" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/audit-log", label: "Audit Log" },
+] as const;
+
 export interface TopbarProps {
   /** The signed-in user's display name, or null while the profile is still loading. */
   username: string | null;
@@ -47,8 +59,9 @@ export interface TopbarProps {
  * and its `logout()` method): brand mark, profile chip (username + role), and a
  * logout button, plus the `nav__links` row. Each role-specific link is added
  * by the phase that introduces its route, so the row currently holds the
- * pilot's "My Bids" (Phase 3) and "My Jobs" (Phase 5); "My Missions" / "New
- * Mission" / "Browse" and the admin section arrive with their own phases.
+ * pilot's "My Bids" (Phase 3) and "My Jobs" (Phase 5) plus the admin section's
+ * four links (Phase 7); "My Missions" / "New Mission" / "Browse" arrive with
+ * their own phase.
  *
  * Unlike `AuthService.logout()` (which is purely local — clears the token,
  * nothing else), this calls the already-ported `POST /api/v1/auth/logout`
@@ -117,6 +130,32 @@ export function Topbar({ username, role }: TopbarProps) {
                 </Link>
               </>
             )}
+
+            {/* Admins only, exactly as the source's `@if (auth.isAdmin)` gates
+                it — the four `/admin/*` routes of `app.routes.ts`, in the
+                order and with the wording `app.component.html` uses ("Audit
+                Log", not the canvas's "Audit log"). This row IS the admin
+                section nav in both ground truths: no admin page renders a nav
+                of its own, so `(app)/admin/layout.tsx` deliberately adds none
+                (see its note). `routerLinkActive` carries no `exact` option on
+                any of these links, hence `startsWith` — which is what keeps
+                "Users" lit on `/admin/users/new` too. Only `/admin/overview`
+                exists as of this task; `missions`, `users` and `audit-log`
+                are the next two tasks of this same phase, and the topbar is
+                this task's to edit. */}
+            {role === "ADMIN" &&
+              ADMIN_NAV.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    NAV_LINK,
+                    pathname.startsWith(href) ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                  )}
+                >
+                  {label}
+                </Link>
+              ))}
           </nav>
         </div>
 

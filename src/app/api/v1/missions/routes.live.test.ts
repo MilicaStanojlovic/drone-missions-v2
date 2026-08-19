@@ -9,6 +9,10 @@ import { POST as registerRoute } from "../auth/register/route";
 import { POST as placeBidRoute } from "../bids/mission/[missionId]/route";
 import { POST as acceptBidRoute } from "../bids/[id]/accept/route";
 import { GET as feedRoute, POST as createRoute } from "./route";
+import { GET as adminListRoute } from "./all/route";
+import { POST as hideRoute } from "./[id]/hide/route";
+import { POST as unhideRoute } from "./[id]/unhide/route";
+import { POST as removeRoute } from "./[id]/remove/route";
 import { GET as myMissionsRoute } from "./my-missions/route";
 import { GET as myJobsRoute } from "./my-jobs/route";
 import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
@@ -49,7 +53,15 @@ import { POST as cancelRoute } from "./[id]/cancel/route";
  *   leaving the open marketplace;
  * - and the negative of the flagged plan-vs-source finding: reading a mission
  *   whose `startTime` is long past never promotes it to IN_PROGRESS, because
- *   the source has no such lazy transition.
+ *   the source has no such lazy transition;
+ * - the phase-7 moderation surface over real rows: `/all` listing what the
+ *   feed deliberately hides (drafts, hidden and cancelled missions) *and*
+ *   surviving an ownerless legacy row through its LEFT join, `/hide` and
+ *   `/unhide` walking one mission out of and back into the live marketplace
+ *   with the cache eviction that makes each direction visible to the very next
+ *   feed read, and `/remove` hard-deleting a mission whose bids, notifications
+ *   and ratings cascade away with it while the audit row survives — the whole
+ *   point of the audit target not being a foreign key.
  *
  * It lives in a separate file rather than in `routes.test.ts` because that
  * file's `vi.mock` of the mission service is module-scoped: a live-DB block
@@ -265,6 +277,37 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
   let otherDesignerId: number;
   let pilotId: number;
   let otherPilotId: number;
+  let adminId: number;
+
+  /**
+   * Ownerless missions this suite inserts directly (`user_id` null), which the
+   * owner-scoped cleanup below cannot reach.
+   */
+  const ownerlessMissionIds: number[] = [];
+
+  /**
+   * Seeds an ADMIN straight into the table. `/api/v1/auth/register` refuses the
+   * role by design — a deployment gets its first admin from the V12 seed
+   * migration — and the moderation handlers only need a verified principal on
+   * the headers, never a password.
+   */
+  async function seedAdmin(): Promise<number> {
+    const now = new Date();
+    const [row] = await getDb()
+      .insert(users)
+      .values({
+        username: "mission-admin",
+        email: uniqueEmail("admin"),
+        passwordHash: "not-a-real-hash",
+        role: "ADMIN",
+        suspended: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: users.id });
+    insertedUserIds.push(row.id);
+    return row.id;
+  }
 
   beforeAll(async () => {
     designerId = await registerTestUser("DESIGNER", "owner");
@@ -272,12 +315,16 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
     pilotId = await registerTestUser("PILOT", "pilot");
     // The losing bidder / the pilot with no claim on someone else's job.
     otherPilotId = await registerTestUser("PILOT", "other-pilot");
+    adminId = await seedAdmin();
   });
 
   afterAll(async () => {
     // Missions first: `fk_mission_user` has no cascade (a designer is not
     // deletable out from under their missions), and ratings/bids hang off the
     // mission by a cascading FK.
+    if (ownerlessMissionIds.length > 0) {
+      await getDb().delete(mission).where(inArray(mission.id, ownerlessMissionIds));
+    }
     if (insertedUserIds.length > 0) {
       await getDb().delete(mission).where(inArray(mission.userId, insertedUserIds));
       // Audit rows deliberately outlive their actor (see `audit_log`'s doc
@@ -1314,6 +1361,405 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
         );
         expect(designerResponse.status).toBe(403);
         expect((await designerResponse.json()).status).toBe("FORBIDDEN");
+      });
+    });
+  });
+
+  describe("the moderation endpoints over real rows", () => {
+    /** Scopes every `?q` search below to this block's own fixtures. */
+    const tag = `moderation-${runId}`;
+
+    /** A mission whose name carries the block's tag, so `?q=` can find it. */
+    async function moderatedMission(label: string, overrides: Record<string, unknown> = {}) {
+      return createMission(designerId, {
+        name: `Moderated ${label} ${tag}`,
+        startTime: localInstant(2030, 9, 1, 8),
+        endTime: localInstant(2030, 9, 1, 10),
+        biddingDeadline: "2030-08-25",
+        ...overrides,
+      });
+    }
+
+    /** One page of `GET /api/v1/missions/all`, as the admin table fetches it. */
+    async function adminList(query: string, userId = adminId, role: UserRole = "ADMIN") {
+      const response = await adminListRoute(
+        getRequest(`http://localhost/api/v1/missions/all${query}`, userId, role),
+        listContext,
+      );
+      return { response, body: await response.json() };
+    }
+
+    /** The live `mission` row, straight from the table. */
+    async function missionRow(id: number) {
+      const [row] = await getDb().select().from(mission).where(eq(mission.id, id));
+      return row;
+    }
+
+    describe("GET /api/v1/missions/all", () => {
+      it("lists every mission there is — including the ones the open feed deliberately withholds", async () => {
+        const published = await moderatedMission("published");
+        const draft = await moderatedMission("draft", { status: "DRAFT" });
+        const hidden = await moderatedMission("hidden");
+        expect(
+          (
+            await hideRoute(
+              postRequest(`http://localhost/api/v1/missions/${hidden.id}/hide`, adminId, "ADMIN"),
+              idContext(hidden.id),
+            )
+          ).status,
+        ).toBe(200);
+
+        const { response, body } = await adminList(`?q=${encodeURIComponent(tag)}&size=2000`);
+
+        expect(response.status).toBe(200);
+        // `new PagedModel<>(…)` field-for-field — the same envelope the users
+        // and audit-log listings speak.
+        expect(Object.keys(body).sort()).toEqual(["content", "page"]);
+        expect(Object.keys(body.page).sort()).toEqual([
+          "number",
+          "size",
+          "totalElements",
+          "totalPages",
+        ]);
+        const ids = body.content.map((m: { id: number }) => m.id);
+        expect(ids).toContain(published.id);
+        // Neither of these is reachable through `GET /api/v1/missions`: a DRAFT
+        // belongs to its owner alone, and a HIDDEN mission has left the
+        // marketplace. The admin table is the one list that must show both.
+        expect(ids).toContain(draft.id);
+        expect(ids).toContain(hidden.id);
+        expect(body.content.find((m: { id: number }) => m.id === hidden.id).moderation).toBe(
+          "HIDDEN",
+        );
+        expect(body.page.totalElements).toBe(body.content.length);
+        // Newest-created first, the `@PageableDefault(sort = "createdAt")`.
+        expect(ids.indexOf(hidden.id)).toBeLessThan(ids.indexOf(published.id));
+
+        const feed = await feedRoute(
+          getRequest(
+            `http://localhost/api/v1/missions?keyword=${encodeURIComponent(tag)}`,
+            pilotId,
+            "PILOT",
+          ),
+          listContext,
+        );
+        const feedIds = (await feed.json()).map((m: { id: number }) => m.id);
+        expect(feedIds).toContain(published.id);
+        expect(feedIds).not.toContain(draft.id);
+        expect(feedIds).not.toContain(hidden.id);
+      });
+
+      it("keeps an ownerless legacy mission, reporting the NONE rating rather than dropping the row", async () => {
+        // The LEFT join the repository's own comment calls load-bearing:
+        // navigating `m.designer.username` would inner-join and silently lose
+        // every pre-auth mission from the one list that must show them all.
+        const now = new Date();
+        const [row] = await getDb()
+          .insert(mission)
+          .values({
+            name: `Ownerless ${tag}`,
+            description: `Legacy row ${tag}`,
+            status: "PUBLISHED",
+            moderation: "VISIBLE",
+            userId: null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: mission.id });
+        ownerlessMissionIds.push(row.id);
+
+        const { body } = await adminList(`?q=${encodeURIComponent(tag)}&size=2000`);
+        const listed = body.content.find((m: { id: number }) => m.id === row.id);
+
+        expect(listed).toBeDefined();
+        expect(listed).toMatchObject({
+          userId: null,
+          designerName: null,
+          designerEmail: null,
+          // Not null-propagated — a primitive `boolean` in the source.
+          designerSuspended: false,
+          // `RatingSummary.NONE`: the ownerless ids never reach the aggregate
+          // query, and the mapper answers for them without a lookup.
+          designerRating: 0,
+          designerRatingCount: 0,
+        });
+      });
+
+      it("matches `?q` against the mission name or the designer's username, case-insensitively", async () => {
+        const target = await moderatedMission("searchable");
+
+        const byName = await adminList(
+          `?q=${encodeURIComponent(`MODERATED SEARCHABLE ${tag}`)}&size=2000`,
+        );
+        expect(byName.body.content.map((m: { id: number }) => m.id)).toEqual([target.id]);
+
+        // The other half of the OR: the designer's username, which no mission
+        // name contains.
+        const byDesigner = await adminList("?q=MISSION-OWNER&size=2000");
+        expect(byDesigner.body.content.map((m: { id: number }) => m.id)).toContain(target.id);
+        expect(
+          byDesigner.body.content.every(
+            (m: { designerName: string | null }) => m.designerName === "mission-owner",
+          ),
+        ).toBe(true);
+
+        // A blank `q` means everything, not nothing.
+        const blank = await adminList("?q=%20&size=1");
+        expect(blank.body.page.totalElements).toBeGreaterThanOrEqual(
+          byDesigner.body.page.totalElements,
+        );
+      });
+
+      it("refuses a designer and a pilot with 403", async () => {
+        for (const [id, role] of [
+          [designerId, "DESIGNER"],
+          [pilotId, "PILOT"],
+        ] as const) {
+          const { response, body } = await adminList("", id, role);
+          expect(response.status).toBe(403);
+          expect(body.status).toBe("FORBIDDEN");
+          // Nothing of the listing leaks to a rejected caller.
+          expect(body.content).toBeUndefined();
+        }
+      });
+    });
+
+    describe("POST /api/v1/missions/{id}/hide and /unhide", () => {
+      /** The ids the open feed currently shows for one keyword. */
+      async function feedIdsFor(keyword: string): Promise<number[]> {
+        const response = await feedRoute(
+          getRequest(
+            `http://localhost/api/v1/missions?keyword=${encodeURIComponent(keyword)}`,
+            pilotId,
+            "PILOT",
+          ),
+          listContext,
+        );
+        return (await response.json()).map((m: { id: number }) => m.id);
+      }
+
+      it("walks a mission out of the live marketplace and back, auditing each direction", async () => {
+        const keyword = `feedable ${tag}`;
+        const target = await moderatedMission("feedable");
+        // Warm the list cache with the mission present, so the assertions below
+        // are about the write path's eviction rather than a cold cache.
+        expect(await feedIdsFor(keyword)).toEqual([target.id]);
+
+        const hidden = await hideRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/hide`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        const hiddenBody = await hidden.json();
+
+        // 200 with the updated mission, not 204: hiding is not deleting, and
+        // the admin table re-renders the row from this body.
+        expect(hidden.status).toBe(200);
+        expect(hiddenBody).toMatchObject({ id: target.id, moderation: "HIDDEN" });
+        // The lifecycle status is untouched — moderation is the other axis.
+        expect(hiddenBody.status).toBe("PUBLISHED");
+        expect((await missionRow(target.id)).moderation).toBe("HIDDEN");
+        expect(await feedIdsFor(keyword)).toEqual([]);
+
+        const hides = (await auditRowsFor(target.id)).filter(
+          (entry) => entry.action === "MISSION_HIDDEN",
+        );
+        expect(hides).toHaveLength(1);
+        expect(hides[0]).toMatchObject({
+          // The acting admin off the verified headers, never the owner.
+          actorId: adminId,
+          actorRole: "ADMIN",
+          targetType: "MISSION",
+          details: `"Moderated feedable ${tag}"`,
+        });
+        // Moderation is silent: nobody is notified, unlike a cancellation.
+        expect(await notificationsFor(designerId, target.id)).toEqual([]);
+
+        const unhidden = await unhideRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/unhide`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        expect(unhidden.status).toBe(200);
+        expect((await unhidden.json()).moderation).toBe("VISIBLE");
+        expect((await missionRow(target.id)).moderation).toBe("VISIBLE");
+        expect(await feedIdsFor(keyword)).toEqual([target.id]);
+        expect(
+          (await auditRowsFor(target.id)).filter((entry) => entry.action === "MISSION_UNHIDDEN"),
+        ).toHaveLength(1);
+      });
+
+      it("409s on a transition the mission is not in the `from` state for, and writes nothing", async () => {
+        const target = await moderatedMission("conflicted");
+
+        // Unhiding a VISIBLE mission: the state machine's `from` guard, and
+        // deliberately *not* the idempotent no-op `users/{id}/suspend` is.
+        const early = await unhideRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/unhide`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        expect(early.status).toBe(409);
+        // The message names the mission's *current* moderation and the
+        // transition's target, so a redundant unhide reads "VISIBLE to
+        // VISIBLE" — `"Mission %d cannot go from %s to %s"` verbatim, and the
+        // Angular client surfaces this text as-is.
+        expect((await early.json()).message).toBe(
+          `Mission ${target.id} cannot go from VISIBLE to VISIBLE`,
+        );
+
+        await hideRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/hide`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        const twice = await hideRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/hide`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        expect(twice.status).toBe(409);
+        expect((await twice.json()).message).toBe(
+          `Mission ${target.id} cannot go from HIDDEN to HIDDEN`,
+        );
+
+        // One button press, one audit row — the rejected second one leaves none.
+        expect(
+          (await auditRowsFor(target.id)).filter((entry) => entry.action === "MISSION_HIDDEN"),
+        ).toHaveLength(1);
+        expect((await missionRow(target.id)).moderation).toBe("HIDDEN");
+      });
+
+      it("404s an unknown mission and 403s everyone but an admin — the owner included", async () => {
+        const target = await moderatedMission("not-yours");
+
+        expect(
+          (
+            await hideRoute(
+              postRequest("http://localhost/api/v1/missions/999999999/hide", adminId, "ADMIN"),
+              idContext(999999999),
+            )
+          ).status,
+        ).toBe(404);
+
+        // Unlike `/cancel`, ownership grants nothing here: moderating one's own
+        // mission is not a designer's act at all.
+        for (const [id, role] of [
+          [designerId, "DESIGNER"],
+          [pilotId, "PILOT"],
+        ] as const) {
+          const response = await hideRoute(
+            postRequest(`http://localhost/api/v1/missions/${target.id}/hide`, id, role),
+            idContext(target.id),
+          );
+          expect(response.status).toBe(403);
+        }
+        expect((await missionRow(target.id)).moderation).toBe("VISIBLE");
+        expect(
+          (await auditRowsFor(target.id)).filter((entry) => entry.action === "MISSION_HIDDEN"),
+        ).toEqual([]);
+      });
+    });
+
+    describe("POST /api/v1/missions/{id}/remove", () => {
+      it("hard-deletes the mission with everything hanging off it, and leaves only the audit row", async () => {
+        const target = await moderatedMission("doomed");
+        // Everything V15 made cascade: a bid, the notification that bid's
+        // rejection raises, and a rating against the mission.
+        const bidId = await placeBid(target.id, pilotId, 700);
+        await getDb().insert(notification).values({
+          userId: pilotId,
+          type: "BID_REJECTED",
+          title: "Bid rejected",
+          message: `Fixture notification ${tag}`,
+          missionId: target.id,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        await getDb().insert(rating).values({
+          missionId: target.id,
+          raterId: pilotId,
+          rateeId: designerId,
+          score: 4,
+          createdAt: new Date(),
+        });
+
+        const response = await removeRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/remove`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+
+        // 204 with no body: the mission no longer exists to be returned — the
+        // one moderation endpoint that answers no `MissionResponse`.
+        expect(response.status).toBe(204);
+        expect(await response.text()).toBe("");
+
+        expect(await getDb().select().from(mission).where(eq(mission.id, target.id))).toEqual([]);
+        expect(await getDb().select().from(bid).where(eq(bid.id, bidId))).toEqual([]);
+        expect(
+          await getDb().select().from(notification).where(eq(notification.missionId, target.id)),
+        ).toEqual([]);
+        expect(
+          await getDb().select().from(rating).where(eq(rating.missionId, target.id)),
+        ).toEqual([]);
+
+        // And the reason `audit_log`'s target is a (type, id) pair rather than
+        // a foreign key: for a hard delete, this row is the only record there
+        // will ever be, so it has to outlive the row it describes.
+        const removals = (await auditRowsFor(target.id)).filter(
+          (entry) => entry.action === "MISSION_REMOVED",
+        );
+        expect(removals).toHaveLength(1);
+        expect(removals[0]).toMatchObject({
+          actorId: adminId,
+          actorRole: "ADMIN",
+          targetType: "MISSION",
+          // Built from the mission loaded *before* the delete.
+          details: `"Moderated doomed ${tag}"`,
+        });
+
+        // Gone from both listings, and a second removal is a 404.
+        const { body } = await adminList(`?q=${encodeURIComponent(`moderated doomed ${tag}`)}`);
+        expect(body.content).toEqual([]);
+        const second = await removeRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/remove`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+        expect(second.status).toBe(404);
+      });
+
+      it("removes a mission in any state, without an ownership or status guard", async () => {
+        // An admin's removal is not the owner's `DELETE /missions/{id}`: there
+        // is no `PUBLISHED`-only rule and no ownership check, so a cancelled
+        // mission belonging to someone else goes just the same.
+        const target = await createMission(otherDesignerId, {
+          name: `Moderated cancelled ${tag}`,
+        });
+        await getDb().update(mission).set({ status: "CANCELLED" }).where(eq(mission.id, target.id));
+
+        const response = await removeRoute(
+          postRequest(`http://localhost/api/v1/missions/${target.id}/remove`, adminId, "ADMIN"),
+          idContext(target.id),
+        );
+
+        expect(response.status).toBe(204);
+        expect(await getDb().select().from(mission).where(eq(mission.id, target.id))).toEqual([]);
+      });
+
+      it("refuses a pilot and the owning designer with 403, keeping the mission", async () => {
+        const target = await moderatedMission("survivor");
+
+        for (const [id, role] of [
+          [pilotId, "PILOT"],
+          [designerId, "DESIGNER"],
+        ] as const) {
+          const response = await removeRoute(
+            postRequest(`http://localhost/api/v1/missions/${target.id}/remove`, id, role),
+            idContext(target.id),
+          );
+          expect(response.status).toBe(403);
+        }
+        expect(await getDb().select().from(mission).where(eq(mission.id, target.id))).toHaveLength(
+          1,
+        );
+        expect(
+          (await auditRowsFor(target.id)).filter((entry) => entry.action === "MISSION_REMOVED"),
+        ).toEqual([]);
       });
     });
   });

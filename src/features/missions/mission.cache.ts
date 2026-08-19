@@ -1,5 +1,6 @@
 import "server-only";
 import type { DbHandle } from "@/db/client";
+import type { Page, PageRequest } from "@/lib/api/paging";
 import { TtlCache, formatCacheStats, type CacheStats, type Clock } from "@/lib/cache";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -85,10 +86,10 @@ import type { Geofence, Mission, MissionWrite, Waypoint } from "./mission.types"
  * is what lets the cache be swapped in without a single call site changing.
  *
  * The methods the source declares but this port does not yet have queries for
- * (`findOverdue`, `searchAll`, `countByStatus`) are absent rather than
- * stubbed; the phases that add those queries add them here too. All three are
- * *uncached* pass-throughs in the source, so nothing about the caching
- * semantics is deferred with them.
+ * (`findOverdue`, `countByStatus`) are absent rather than stubbed; the phases
+ * that add those queries add them here too. Both are *uncached* pass-throughs
+ * in the source, so nothing about the caching semantics is deferred with them
+ * — as is `searchAll`, which is present below for exactly that reason.
  *
  * `findByAwardedPilotId` is not in that group and never was: the source
  * caches it, under its own `OwnerKey("byPilot", …)`, exactly as it caches
@@ -107,6 +108,11 @@ export interface MissionDao {
   findByUserId(userId: number): Promise<Mission[]>;
   /** Missions awarded to this pilot. */
   findByAwardedPilotId(pilotId: number): Promise<Mission[]>;
+  /**
+   * The admin listing — every mission, paged, optionally narrowed by a ready
+   * `%…%` pattern. Deliberately *not* cached (see the implementation below).
+   */
+  searchAll(pattern: string | null, request: PageRequest): Promise<Page<Mission>>;
   /**
    * Drop every cached list. For moderation events that change feed membership
    * without a mission write — suspending a designer hides their missions, but
@@ -332,6 +338,21 @@ export class CachingMissionDao implements MissionDao {
   }
 
   /**
+   * Not cached: a rare admin-only view is not worth widening the invalidation
+   * surface. Straight through to the delegate, exactly as in the source — the
+   * list cache stores *ordered ids per query*, and a paged, pattern-filtered
+   * listing would multiply the key space while every mission write already
+   * clears the whole list cache anyway.
+   *
+   * Note the second-order effect this avoids: the entity cache is not
+   * populated from here either, so the admin listing never seeds cached rows
+   * that the open feed would then serve.
+   */
+  async searchAll(pattern: string | null, request: PageRequest): Promise<Page<Mission>> {
+    return this.delegate.searchAll(pattern, request);
+  }
+
+  /**
    * Feed membership changed without a mission write (a designer was suspended
    * or reactivated). Only the id arrays go; the entity rows are still correct.
    */
@@ -460,6 +481,7 @@ const uncachedMissionDao: MissionDao = {
   findOpen: queries.findOpen,
   findByUserId: queries.findByUserId,
   findByAwardedPilotId: queries.findByAwardedPilotId,
+  searchAll: queries.searchAll,
   invalidateLists: () => {},
   invalidate: () => {},
   save: queries.save,

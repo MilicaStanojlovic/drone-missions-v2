@@ -5,10 +5,14 @@ import {
   missionCompleted,
   missionCreated,
   missionDeleted,
+  missionHidden,
+  missionRemoved,
   missionStarted,
+  missionUnhidden,
   missionUpdated,
   record,
 } from "@/lib/audit";
+import type { Page, PageRequest } from "@/lib/api/paging";
 import { emailService } from "@/lib/email/email.service";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import * as bidQueries from "@/features/bids/bid.queries";
@@ -20,16 +24,15 @@ import {
 } from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { getMissionDao } from "./mission.cache";
-import type { Mission, MissionStatus, MissionWrite } from "./mission.types";
+import type { Mission, MissionModeration, MissionStatus, MissionWrite } from "./mission.types";
 
 /**
  * Mission business logic (replaces `business.service.mission.MissionService`).
  *
  * Phase-2 slice: `create`, `findOpen`, `findOwnedBy`, `findById`, `update`,
  * `delete`; Phase 5 adds the lifecycle transitions (`start`, `complete`,
- * `cancel`) and `findAwardedTo`. Moderation (`hide`/`unhide`/`remove`) and the
- * admin listing (`searchAll`) are Phase 7 — each lands with the routes that
- * call it.
+ * `cancel`) and `findAwardedTo`; Phase 7 adds the admin listing (`searchAll`)
+ * and moderation (`hide`/`unhide`/`remove`).
  *
  * ## The lifecycle never advances on its own
  * A mission moves AWARDED -> IN_PROGRESS -> COMPLETED only because the awarded
@@ -226,6 +229,32 @@ function dayBounds(date: string | null | undefined): { from: Date | null; to: Da
     from: new Date(year, month - 1, day),
     to: new Date(year, month - 1, day + 1),
   };
+}
+
+/**
+ * The admin listing: every mission there is, whatever its status, moderation
+ * or owner, paged and newest-created first. Mirrors
+ * `MissionService.searchAll`.
+ *
+ * A blank (or absent) `q` means "everything"; anything else becomes a
+ * lowercase `%…%` LIKE pattern **here, not in SQL** — the source's own comment
+ * makes the point, and it is the same normalisation `findOpen` does for the
+ * feed filters, so the query layer only ever receives a ready pattern or null.
+ *
+ * No visibility rule and no moderation filter: this is the one listing that
+ * must show hidden missions and drafts, because it is what an admin moderates
+ * from. The ADMIN gate lives in the route handler, where the source's
+ * `@PreAuthorize("hasRole('ADMIN')")` on `MissionController.adminList` sits.
+ *
+ * Uncached, like every paged read in this port — see `mission.cache.ts`'s
+ * `searchAll`.
+ */
+export async function searchAll(
+  q: string | null | undefined,
+  request: PageRequest,
+): Promise<Page<Mission>> {
+  const normalized = normalize(q);
+  return getMissionDao().searchAll(normalized === null ? null : `%${normalized}%`, request);
 }
 
 /** The missions the caller created and owns. Mirrors `findOwnedBy`. */
@@ -482,6 +511,93 @@ async function getFreshOrThrow(id: number): Promise<Mission> {
     throw new MissionNotFoundError(id);
   }
   return mission;
+}
+
+/**
+ * An admin takes a mission out of the marketplace: VISIBLE -> HIDDEN. Mirrors
+ * `MissionService.hide`.
+ *
+ * Hiding is not deleting — the mission, its bids and its history all survive,
+ * and `unhide` puts it back. What changes is feed membership: `findOpen`'s
+ * query requires `moderation = 'VISIBLE'`, so a hidden mission drops out of
+ * the marketplace and out of `findById` for everyone except its owner and its
+ * awarded pilot, who are exempt from that rule (see `isVisibleTo`). The
+ * `save()` through the DAO evicts the cached copy and every cached list, so
+ * the feed reflects it immediately.
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ * @throws MissionConflictError if it is not currently VISIBLE
+ */
+export async function hide(id: number, adminId: number): Promise<Mission> {
+  const mission = await moderate(id, "VISIBLE", "HIDDEN");
+  await record(missionHidden(adminId, mission));
+  return mission;
+}
+
+/**
+ * The mirror image: HIDDEN -> VISIBLE, returning the mission to the
+ * marketplace. Mirrors `MissionService.unhide`.
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ * @throws MissionConflictError if it is not currently HIDDEN
+ */
+export async function unhide(id: number, adminId: number): Promise<Mission> {
+  const mission = await moderate(id, "HIDDEN", "VISIBLE");
+  await record(missionUnhidden(adminId, mission));
+  return mission;
+}
+
+/**
+ * Admin removal — a *real* delete, not a moderation state. Mirrors
+ * `MissionService.remove`.
+ *
+ * Bids, notifications and ratings cascade away with the mission through the
+ * `ON DELETE CASCADE` foreign keys the migrations declare (V15 is the one that
+ * made the mission's own dependents cascade, which is what lets this be a hard
+ * delete at all), and only the audit row keeps the history — which is why the
+ * entry is built from the mission loaded *before* the delete, exactly as
+ * `deleteMission` does.
+ *
+ * Deliberately no ownership check and no status guard: an admin may remove any
+ * mission in any state. The only guard is existence, and it is the same
+ * `getFreshOrThrow` every mutating flow opens with, so a missing mission is a
+ * 404 and nothing is deleted or audited.
+ *
+ * @throws MissionNotFoundError if no such mission exists
+ */
+export async function remove(id: number, adminId: number): Promise<void> {
+  const mission = await getFreshOrThrow(id);
+  await getMissionDao().delete(mission);
+  await record(missionRemoved(adminId, mission));
+}
+
+/**
+ * The hide/unhide state machine. Mirrors the private
+ * `MissionService.moderate(id, from, to)`.
+ *
+ * One shared transition rather than two near-identical methods, and the
+ * `from` guard is what makes each direction idempotent-*safe* rather than
+ * idempotent: unlike `UserService.suspend`, which silently returns an already
+ * suspended account, a mission already in the target state is a 409. That
+ * asymmetry is the source's, and it is deliberate — the admin UI's two buttons
+ * are per-row and mutually exclusive, so "hide an already hidden mission"
+ * means the caller was looking at stale data, and saying so beats writing a
+ * second audit row for a state change that did not happen.
+ *
+ * The conflict message names the *current* moderation and the target, matching
+ * the source's `"Mission %d cannot go from %s to %s"` — the Angular client
+ * surfaces that text verbatim.
+ */
+async function moderate(
+  id: number,
+  from: MissionModeration,
+  to: MissionModeration,
+): Promise<Mission> {
+  const mission = await getFreshOrThrow(id);
+  if (mission.moderation !== from) {
+    throw new MissionConflictError(`Mission ${id} cannot go from ${mission.moderation} to ${to}`);
+  }
+  return getMissionDao().save({ ...mission, moderation: to });
 }
 
 /**

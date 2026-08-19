@@ -5,14 +5,14 @@ import { existsByEmail, findByEmail, insertUser } from "@/features/users/user.qu
 import type { User } from "@/features/users/user.types";
 import type { UserRole } from "@/db/schema";
 import { ConflictError, ForbiddenError, UnauthorizedError } from "@/lib/errors";
-import { record, userLoggedIn, userRegistered } from "@/lib/audit";
+import { adminCreated, record, userLoggedIn, userRegistered } from "@/lib/audit";
 
 /**
  * Registration and authentication (replaces `business.service.auth.AuthService`).
  *
- * `createUser` and `login` are ported in this phase — `createAdmin` (the
- * authenticated-admin path past the self-registration guard below) is
- * Phase 7.
+ * `createUser` and `login` were ported in Phase 1; `createAdmin` — the
+ * authenticated-admin path past the self-registration guard below — lands
+ * here in Phase 7 alongside the admin endpoints that reach it.
  *
  * Credential verification here is a direct bcrypt-compare against the
  * looked-up row rather than delegating to a Spring-Security-style
@@ -22,7 +22,7 @@ import { record, userLoggedIn, userRegistered } from "@/lib/audit";
  * an unknown email and a wrong password are indistinguishable to the
  * caller, both surfacing as the single `InvalidCredentialsError` below.
  *
- * SOURCE: drone-missions-backend/.../business/service/auth/AuthService.java (`createUser`, `login`)
+ * SOURCE: drone-missions-backend/.../business/service/auth/AuthService.java (`createUser`, `createAdmin`, `login`)
  */
 
 /**
@@ -95,6 +95,44 @@ export async function createUser(
   const passwordHash = await hashPassword(rawPassword);
   const user = await insertUser({ username, email, passwordHash, role });
   await record(userRegistered(user));
+  return user;
+}
+
+/**
+ * An authenticated admin creates another admin — the only way past the ADMIN
+ * guard in `createUser` above. Mirrors `AuthService.createAdmin`.
+ *
+ * The two differences from `createUser` are both deliberate and both come
+ * straight from the source:
+ *
+ * - **No `AdminRegistrationNotAllowedError` check.** The role is not an
+ *   argument at all; it is hardcoded ADMIN, so there is nothing to reject.
+ *   What keeps this path privileged is the `requireRole(caller, "ADMIN")` in
+ *   the route handler, standing in for `@PreAuthorize("hasRole('ADMIN')")` on
+ *   `UserController.createAdmin` — the service is reachable only through it.
+ * - **The audit actor is the *creator*, not the new account.** `createUser`
+ *   records the registrant as its own actor via `userRegistered`; here
+ *   `adminCreated(creatorAdminId, saved)` answers "which admin let this one
+ *   in", which is the question an admin-minting trail exists to answer.
+ *
+ * Ordering matches `createUser` exactly, and for the same reason: the duplicate
+ * check comes before the hash and the insert, so a rejected request writes
+ * neither a user row nor an audit row.
+ *
+ * @throws EmailAlreadyExistsError if the email is already registered
+ */
+export async function createAdmin(
+  username: string,
+  email: string,
+  rawPassword: string,
+  creatorAdminId: number,
+): Promise<User> {
+  if (await existsByEmail(email)) {
+    throw new EmailAlreadyExistsError(email);
+  }
+  const passwordHash = await hashPassword(rawPassword);
+  const user = await insertUser({ username, email, passwordHash, role: "ADMIN" });
+  await record(adminCreated(creatorAdminId, user));
   return user;
 }
 
