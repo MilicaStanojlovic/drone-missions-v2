@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { apiFetch, clearToken } from "@/features/auth/auth.client";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import type { UserRole } from "@/db/schema";
 
 /** Human label for the role chip. Mirrors `AppComponent.roleLabel`. */
@@ -70,6 +71,11 @@ export function Topbar({ username, role }: TopbarProps) {
         </Link>
 
         <div className="flex items-center gap-3.5">
+          {/* Pilots only — the same `@if (auth.isPilot)` gate the source puts
+              around `<app-notification-bell />` in `nav__account`, and in the
+              same slot: immediately before the profile chip. Designers and
+              admins are never notified, so they get no bell. */}
+          {role === "PILOT" && <NotificationBell />}
           <span
             className="border-border bg-secondary/40 flex items-center gap-2 rounded-full border py-1 pr-3.5 pl-2.5"
             title="Your account"
