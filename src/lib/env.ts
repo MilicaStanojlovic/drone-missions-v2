@@ -82,6 +82,51 @@ export const envSchema = z.object({
   MAIL_ENABLED: booleanFromEnv(false),
   MAIL_FROM: z.string().min(1).default("DroneMissions <no-reply@dronemissions.app>"),
   RESEND_API_KEY: z.string().min(1).optional(),
+  // Dev-testing override (`app.mail.redirect-to:` — empty default in Spring):
+  // when set, every message is delivered to this inbox instead of the real
+  // recipient, with the intended address tagged into the subject. Blank is
+  // the normal-delivery signal, so — unlike the optional vars above — an
+  // explicitly empty value is *valid* here rather than rejected, and the
+  // schema defaults to "" instead of leaving it undefined. Whitespace-only
+  // counts as blank too, mirroring Spring's `redirectTo.isBlank()` check:
+  // trimming here means the consumer's test is a plain `!== ""`, and a
+  // stray-space value can never be handed to Resend as a recipient.
+  MAIL_REDIRECT_TO: z
+    .string()
+    .default("")
+    .transform((value) => value.trim()),
+
+  // --- App base URL (app.frontend-url) ---
+  // Absolute origin used to build the CTA links inside emails
+  // (`${APP_URL}/missions/{id}`, `${APP_URL}/missions`).
+  //
+  // Two intentional differences from the Spring source, both consequences of
+  // the migration rather than behavior changes:
+  //  - Name: Spring reads `FRONTEND_URL` into `app.frontend-url` because the
+  //    Angular SPA lived at a *different* origin than the API. In this port
+  //    the Next app serves both, so there is no separate frontend to point
+  //    at — the variable is the app's own public origin, named APP_URL.
+  //  - Default: `http://localhost:8085` — this app's own dev origin, i.e.
+  //    localhost on the PORT default below — rather than Spring's
+  //    `http://localhost:4200` (the Angular dev server, which no longer
+  //    exists). Spring's default pointed at whatever origin actually served
+  //    the UI; here that is this app, so the two defaults must stay in step:
+  //    change PORT's default and this one follows.
+  // A trailing slash is stripped so concatenating "/missions/..." can never
+  // produce a double slash; Spring concatenated raw, but its default value
+  // had no trailing slash to begin with.
+  //
+  // The `protocol` constraint is not decoration: a bare `z.url()` accepts
+  // "localhost:8085", because WHATWG URL parsing reads "localhost:" as the
+  // scheme. That would sail through validation and then produce unclickable
+  // "localhost:8085/missions/7" links in every email.
+  APP_URL: z
+    .url({
+      protocol: /^https?$/,
+      error: "APP_URL must be an absolute http(s) URL (e.g. http://localhost:8085)",
+    })
+    .default("http://localhost:8085")
+    .transform((value) => value.replace(/\/+$/, "")),
 
   // --- Mission cache (app.cache.mission.*) ---
   // Ports `MissionCacheProperties`, defaults and all. `enabled=false` is not a

@@ -145,8 +145,51 @@ const STRUCTURAL_KEYS = [
 function stripCheckConstraintText(tables) {
   const result = {};
   for (const [tableName, table] of Object.entries(tables ?? {})) {
+    // Flyway's own bookkeeping table lives only in the database, never in
+    // src/db/schema.ts — its presence is expected, not drift.
+    if (tableName === "public.flyway_schema_history") continue;
     const rest = { ...table };
     delete rest.checkConstraints;
+    // `generate` spells parameterized types "timestamp (6) with time zone"
+    // (space before the parens) while `introspect` returns Postgres's own
+    // "timestamp(6) with time zone" — same type, cosmetic difference.
+    if (rest.columns) {
+      const columns = {};
+      for (const [colName, col] of Object.entries(rest.columns)) {
+        columns[colName] =
+          typeof col?.type === "string" ? { ...col, type: col.type.replace(/\s+\(/g, "(") } : col;
+      }
+      rest.columns = columns;
+    }
+    // `introspect` decorates foreign keys with schemaTo: "public" and index
+    // columns with their operator class and NULLS ordering; `generate` omits
+    // all three (they are Postgres defaults, not schema decisions). Drop them
+    // from both sides so only real structure is compared.
+    if (rest.foreignKeys) {
+      const fks = {};
+      for (const [fkName, fk] of Object.entries(rest.foreignKeys)) {
+        const { schemaTo, ...fkRest } = fk;
+        fks[fkName] = fkRest;
+      }
+      rest.foreignKeys = fks;
+    }
+    if (rest.indexes) {
+      const indexes = {};
+      for (const [idxName, idx] of Object.entries(rest.indexes)) {
+        const copy = { ...idx };
+        if (Array.isArray(copy.columns)) {
+          copy.columns = copy.columns.map((c) => {
+            if (c && typeof c === "object") {
+              const { opclass, nulls, ...colRest } = c;
+              return colRest;
+            }
+            return c;
+          });
+        }
+        indexes[idxName] = copy;
+      }
+      rest.indexes = indexes;
+    }
     result[tableName] = rest;
   }
   return result;
