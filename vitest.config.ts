@@ -55,7 +55,11 @@ export default defineConfig({
       // undefined otherwise, matching src/lib/env.ts's "optional at parse
       // time" contract and reproducing the exact env this app already runs
       // under locally/in CI — no separate test-only connection string.
-      DATABASE_URL: localEnv.DATABASE_URL,
+      // Spread-conditional: assigning `undefined` here would coerce to the
+      // string "undefined" in process.env, making DB-less environments (CI
+      // without a service) look like they HAVE a database and running every
+      // live-DB suite against a bogus URL. Omit the key entirely instead.
+      ...(localEnv.DATABASE_URL ? { DATABASE_URL: localEnv.DATABASE_URL } : {}),
     },
   },
 });

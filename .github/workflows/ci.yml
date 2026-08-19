@@ -2,11 +2,11 @@ name: CI
 
 # Replaces the Spring/Maven build's Checkstyle + `mvn verify` gate: lint,
 # typecheck, unit/integration tests, and a production build must all pass
-# before a change can merge. `pnpm db:check` (real schema drift against a
-# live DB — see scripts/check-schema-drift.mjs) only runs once a real
-# `DATABASE_URL` secret is configured for this repo — until then it is
-# reported as skipped rather than failing the pipeline, mirroring how the
-# app itself runs DB-less during this phase.
+# before a change can merge. The job runs a real Postgres service, applies
+# the Flyway V1-V18 migrations to it, and points the live-DB integration
+# suites and the schema drift guard (`pnpm db:check`, see
+# scripts/check-schema-drift.mjs) at it — the same environment the app
+# runs against locally via docker-compose.
 
 on:
   push:
@@ -22,12 +22,23 @@ jobs:
   build-and-test:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
-    # `secrets` is not a valid context in a step-level `if:` (only github,
-    # needs, strategy, matrix, job, runner, env, vars, steps, inputs are) —
-    # hoisting the check into a job-level env var lets later steps branch on
-    # a plain `env.HAS_DB` boolean instead.
-    env:
-      HAS_DB: ${{ secrets.DATABASE_URL != '' }}
+    # Real Postgres for the live-DB integration suites — the same schema the
+    # app runs on locally (Flyway V1-V18 applied below), so notification/auth
+    # route tests run for real in CI instead of skipping.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dronemissions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,8 +64,19 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Apply Flyway migrations (V1-V18)
+        run: >-
+          docker run --rm --network host
+          -v ${{ github.workspace }}/db/migration:/flyway/sql
+          flyway/flyway:10
+          -url=jdbc:postgresql://localhost:5432/dronemissions
+          -user=postgres -password=postgres
+          -connectRetries=10 migrate
+
       - name: Unit / integration tests
         run: pnpm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dronemissions
 
       # `next build` evaluates every route module during "Collecting page
       # data" (see src/app/api/health/route.ts), which imports the fail-fast
@@ -68,12 +90,9 @@ jobs:
         env:
           JWT_SECRET: ci-build-fixture-jwt-secret-not-a-real-secret-32bytes
 
+      # Drift guard now runs against the job's own freshly-Flyway-migrated
+      # service DB — exactly the "schema.ts mirrors the migrations" contract.
       - name: Schema drift check
-        if: env.HAS_DB == 'true'
         run: pnpm db:check
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      - name: Schema drift check (skipped)
-        if: env.HAS_DB == 'false'
-        run: echo "pnpm db:check skipped — no DB configured"
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dronemissions
