@@ -1,5 +1,18 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { mission, users, type MissionStatus } from "@/db/schema";
 import type { User } from "@/features/users/user.types";
@@ -19,16 +32,16 @@ import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mi
  * snapshot back over columns (`status`, `awardedPilotId`) an edit deliberately
  * never touches.
  *
- * `findOverdue` (Phase 8), `searchAll` and `countByStatus` (Phases 7/9) and
- * the decorator's `invalidateLists` (Phase 3's cache task) are not ported
- * here.
+ * `searchAll` and `countByStatus` (Phases 7/9) and the decorator's
+ * `invalidateLists` (Phase 3's cache task) are not ported here.
  *
  * SOURCE:
  * - drone-missions-backend/.../data/access/JpaMissionDao.java
  * - drone-missions-backend/.../data/access/MissionDao.java (contract + findById/findFresh rule)
  * - drone-missions-backend/.../data/access/OpenMissionQuery.java
  * - drone-missions-backend/.../data/repository/MissionRepository.java
- *   (`findByDesigner_Id`, `findByAwardedPilot_Id`)
+ *   (`findByDesigner_Id`, `findByAwardedPilot_Id`,
+ *   `findByAwardedPilot_IdIsNotNullAndStatusInAndEndTimeBefore`)
  * - drone-missions-backend/.../data/model/Mission.java
  */
 
@@ -200,6 +213,43 @@ export async function findByUserId(userId: number): Promise<Mission[]> {
  */
 export async function findByAwardedPilotId(pilotId: number): Promise<Mission[]> {
   const rows = await selectMissions().where(eq(mission.awardedPilotId, pilotId));
+  return rows.map(toMission);
+}
+
+/**
+ * Missions with a pilot on them whose flight window has already ended — the
+ * overdue sweep's candidates. Mirrors
+ * `MissionRepository.findByAwardedPilot_IdIsNotNullAndStatusInAndEndTimeBefore`,
+ * reached through `JpaMissionDao.findOverdue`: `awarded_pilot_id IS NOT NULL
+ * AND status IN (…) AND end_time < endedBefore`.
+ *
+ * The three predicates in the derived query name, in order:
+ * - `AwardedPilot_IdIsNotNull` — a mission nobody was awarded has no one to
+ *   nudge. Tested on the id column here rather than on the joined row, exactly
+ *   as the property path `awardedPilot.id` does in Java; a foreign key is
+ *   non-null precisely when the relation is set.
+ * - `StatusIn` — which statuses count as "still owed a flight" is the
+ *   scheduler's policy, not this layer's, so the caller supplies them.
+ * - `EndTimeBefore` — strictly `<`, matching Spring Data's `Before` keyword,
+ *   so a mission ending exactly at the cutoff instant is not yet overdue.
+ *
+ * No moderation filter and no `ORDER BY`, because the derived query declares
+ * neither: a hidden mission still owes its pilot the same reminder, and the
+ * sweep's ordering carries no meaning.
+ *
+ * Never cached — see the decorator's pass-through in `mission.cache.ts`.
+ */
+export async function findOverdue(
+  statuses: readonly MissionStatus[],
+  endedBefore: Date,
+): Promise<Mission[]> {
+  const rows = await selectMissions().where(
+    and(
+      isNotNull(mission.awardedPilotId),
+      inArray(mission.status, [...statuses]),
+      lt(mission.endTime, endedBefore),
+    ),
+  );
   return rows.map(toMission);
 }
 

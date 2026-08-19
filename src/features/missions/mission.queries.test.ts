@@ -53,6 +53,8 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   const edgeTag = `edge-${runId}`;
   /** Scopes the awarded-pilot fixtures to their own cases. */
   const jobsTag = `jobs-${runId}`;
+  /** Scopes the overdue-sweep fixtures to their own cases. */
+  const sweepTag = `sweep-${runId}`;
 
   const insertedUserIds: number[] = [];
   const insertedMissionIds: number[] = [];
@@ -62,6 +64,12 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   let pilotId: number;
   let otherPilotId: number;
   let unawardedPilotId: number;
+  /**
+   * The sweep fixtures get pilots of their own so that the `findByAwardedPilotId`
+   * cases above can keep asserting an exact list.
+   */
+  let sweepPilotId: number;
+  let sweepOtherPilotId: number;
 
   let openPublishedId: number;
   let openBiddingId: number;
@@ -75,6 +83,15 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   let awardedToPilotId: number;
   let inProgressHiddenPilotId: number;
   let awardedToOtherPilotId: number;
+  let overdueAwardedId: number;
+  let overdueInProgressId: number;
+  let overdueHiddenId: number;
+  let overdueNoPilotId: number;
+  let overdueCompletedId: number;
+  let overdueCancelledId: number;
+  let overdueEndsAtCutoffId: number;
+  let overdueStillRunningId: number;
+  let overdueNoEndTimeId: number;
 
   async function insertUser(
     label: string,
@@ -154,6 +171,16 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
   }
 
   /**
+   * The overdue sweep's `endedBefore` argument. The scheduler computes it as the
+   * start of today in `Europe/Belgrade`; here it is a fixed instant, because
+   * which instant it is is the scheduler's business and this layer only compares
+   * against whatever it is handed.
+   */
+  const sweepCutoff = local(2026, 5, 1);
+  /** Comfortably on the overdue side of it. */
+  const endedBeforeCutoff = local(2026, 4, 30, 12);
+
+  /**
    * A complete new mission for the `save`/`delete` cases — every writable
    * column populated, including both `jsonb` ones, so a round trip through
    * Postgres is actually exercised rather than a row of nulls.
@@ -192,6 +219,8 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
     pilotId = await insertUser("pilot", "PILOT");
     otherPilotId = await insertUser("other-pilot", "PILOT");
     unawardedPilotId = await insertUser("unawarded-pilot", "PILOT");
+    sweepPilotId = await insertUser("sweep-pilot", "PILOT");
+    sweepOtherPilotId = await insertUser("sweep-other-pilot", "PILOT");
 
     // Distinct, ordered creation timestamps so `ORDER BY created_at DESC` has
     // exactly one correct answer.
@@ -303,6 +332,91 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
       userId: designerId,
       awardedPilotId: otherPilotId,
       createdAt: local(2026, 1, 1, 12),
+    });
+
+    // Overdue-sweep fixtures: one row per predicate the derived query name
+    // spells out, so a case can fail for exactly one reason.
+    overdueAwardedId = await insertMission({
+      name: `overdue awarded ${runId}`,
+      description: `${sweepTag} awarded, window closed`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 13),
+    });
+    overdueInProgressId = await insertMission({
+      name: `overdue in progress ${runId}`,
+      description: `${sweepTag} started, window closed`,
+      status: "IN_PROGRESS",
+      userId: designerId,
+      awardedPilotId: sweepOtherPilotId,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 14),
+    });
+    overdueHiddenId = await insertMission({
+      name: `overdue hidden ${runId}`,
+      description: `${sweepTag} moderated away, still owes a flight`,
+      status: "AWARDED",
+      moderation: "HIDDEN",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 15),
+    });
+    overdueNoPilotId = await insertMission({
+      name: `overdue unawarded ${runId}`,
+      description: `${sweepTag} nobody to nudge`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: null,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 16),
+    });
+    overdueCompletedId = await insertMission({
+      name: `overdue completed ${runId}`,
+      description: `${sweepTag} the flight already happened`,
+      status: "COMPLETED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 17),
+    });
+    overdueCancelledId = await insertMission({
+      name: `overdue cancelled ${runId}`,
+      description: `${sweepTag} called off before the window closed`,
+      status: "CANCELLED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: endedBeforeCutoff,
+      createdAt: local(2026, 1, 1, 18),
+    });
+    overdueEndsAtCutoffId = await insertMission({
+      name: `overdue at cutoff ${runId}`,
+      description: `${sweepTag} ends exactly at the cutoff instant`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: sweepCutoff,
+      createdAt: local(2026, 1, 1, 19),
+    });
+    overdueStillRunningId = await insertMission({
+      name: `overdue still running ${runId}`,
+      description: `${sweepTag} window has not closed yet`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: local(2026, 5, 1, 1),
+      createdAt: local(2026, 1, 1, 20),
+    });
+    overdueNoEndTimeId = await insertMission({
+      name: `overdue open-ended ${runId}`,
+      description: `${sweepTag} no flight window at all`,
+      status: "AWARDED",
+      userId: designerId,
+      awardedPilotId: sweepPilotId,
+      endTime: null,
+      createdAt: local(2026, 1, 1, 21),
     });
   });
 
@@ -491,6 +605,105 @@ describe.runIf(hasDb)("mission.queries.ts (live DB)", () => {
 
     it("returns nothing for a pilot who has been awarded no missions", async () => {
       expect(await queries.findByAwardedPilotId(unawardedPilotId)).toEqual([]);
+    });
+  });
+
+  /**
+   * `findOverdue` is the one read here with no tag-shaped filter to hide behind:
+   * the derived query carries no keyword predicate, so it answers over every
+   * mission in the database, including rows a concurrent live suite is holding.
+   * Each case therefore asserts *membership* — this run's fixtures that must be
+   * in the result, and this run's fixtures that must not — rather than the whole
+   * list, which is the only formulation that stays deterministic.
+   */
+  describe("findOverdue", () => {
+    /** What the Phase 8 scheduler sweeps: a pilot is on the hook in both. */
+    const SWEEP_STATUSES: readonly MissionStatus[] = ["AWARDED", "IN_PROGRESS"];
+
+    async function sweptIds(
+      statuses: readonly MissionStatus[] = SWEEP_STATUSES,
+      endedBefore: Date = sweepCutoff,
+    ): Promise<number[]> {
+      return (await queries.findOverdue(statuses, endedBefore)).map((m) => m.id);
+    }
+
+    it("matches AWARDED and IN_PROGRESS missions with a pilot whose window has closed", async () => {
+      const ids = await sweptIds();
+
+      expect(ids).toEqual(
+        expect.arrayContaining([overdueAwardedId, overdueInProgressId, overdueHiddenId]),
+      );
+    });
+
+    it("includes a moderated-away mission — the sweep has no moderation filter", async () => {
+      const found = await queries.findOverdue(SWEEP_STATUSES, sweepCutoff);
+
+      // Hiding a mission from the marketplace does not release its pilot from
+      // the flight they were awarded, so the derived query names no moderation
+      // predicate and this row still comes back.
+      expect(found.find((m) => m.id === overdueHiddenId)?.moderation).toBe("HIDDEN");
+    });
+
+    it("excludes a mission nobody was awarded", async () => {
+      const ids = await sweptIds();
+
+      // `AwardedPilot_IdIsNotNull`: there is no one to nudge.
+      expect(ids).not.toContain(overdueNoPilotId);
+    });
+
+    it("excludes statuses outside the set it was given", async () => {
+      const ids = await sweptIds();
+
+      expect(ids).not.toContain(overdueCompletedId);
+      expect(ids).not.toContain(overdueCancelledId);
+      // The unawarded open-feed rows are out on both counts.
+      expect(ids).not.toContain(openPublishedId);
+      expect(ids).not.toContain(draftId);
+    });
+
+    it("honours the caller's status set rather than a hard-coded one", async () => {
+      const awardedOnly = await sweptIds(["AWARDED"]);
+
+      // Which statuses count as "still owed a flight" is the scheduler's policy,
+      // not this layer's.
+      expect(awardedOnly).toContain(overdueAwardedId);
+      expect(awardedOnly).not.toContain(overdueInProgressId);
+    });
+
+    it("treats the cutoff as strictly exclusive", async () => {
+      const ids = await sweptIds();
+
+      // Spring Data's `Before` keyword is `<`, so a mission ending exactly at
+      // the cutoff instant is not yet overdue — which is what keeps the first
+      // sweep of a day from nudging a flight that ended at midnight sharp.
+      expect(ids).not.toContain(overdueEndsAtCutoffId);
+      expect(ids).not.toContain(overdueStillRunningId);
+    });
+
+    it("excludes a mission with no flight window at all", async () => {
+      const ids = await sweptIds();
+
+      // `end_time < cutoff` is NULL for an open-ended mission, and a NULL
+      // predicate is not a match — the same three-valued logic the JPQL has.
+      expect(ids).not.toContain(overdueNoEndTimeId);
+    });
+
+    it("attaches the designer, like every other read", async () => {
+      const found = await queries.findOverdue(SWEEP_STATUSES, sweepCutoff);
+      const overdue = found.find((m) => m.id === overdueAwardedId);
+
+      // The sweep's email names who commissioned the mission, so the same LEFT
+      // designer join has to be in this query too.
+      expect(overdue?.designer).toMatchObject({ id: designerId, username: "queries-designer" });
+      expect(overdue?.awardedPilotId).toBe(sweepPilotId);
+    });
+
+    it("returns nothing when the cutoff predates every candidate", async () => {
+      const ids = await sweptIds(SWEEP_STATUSES, local(2020, 1, 1));
+
+      expect(ids).not.toContain(overdueAwardedId);
+      expect(ids).not.toContain(overdueInProgressId);
+      expect(ids).not.toContain(overdueHiddenId);
     });
   });
 

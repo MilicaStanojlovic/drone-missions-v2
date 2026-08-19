@@ -29,6 +29,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1",
     "next": "15.5.23",
+    "node-cron": "^4.6.0",
     "pino": "^9",
     "postgres": "^3.4.9",
     "react": "19.1.0",

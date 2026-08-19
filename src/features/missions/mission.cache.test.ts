@@ -13,11 +13,13 @@ import type { User } from "@/features/users/user.types";
  * no framework, is the testability argument for having the interface, exactly
  * as the Java test mocks `MissionDao` rather than a repository.
  *
- * Four Java cases have no counterpart here:
- * - `overdueSweepIsNotCached`, `statusCountsAreNotCached`, `adminSearchIsNotCached`
- *   cover methods this phase has no queries for (Phases 7/8/9). They are
- *   uncached pass-throughs in the source, and the phases that add them add
- *   these cases with them.
+ * Three Java cases have no counterpart here:
+ * - `statusCountsAreNotCached` and `adminSearchIsNotCached` cover methods this
+ *   port has no queries for yet. They are uncached pass-throughs in the source,
+ *   and the phases that add them add these cases with them.
+ *   (`overdueSweepIsNotCached` was in that group until Phase 8; it is ported at
+ *   the bottom of this file, widened to also pin what "not cached" has to mean
+ *   here — see that block's comment.)
  * - the three transaction-synchronisation cases
  *   (`entryRepopulatedDuringATransactionIsClearedOnCompletion`,
  *   `evictionAlsoHappensAfterARollback`, and the "no transaction" variant of
@@ -96,6 +98,7 @@ function fakeDelegate() {
     findOpen: vi.fn<MissionDao["findOpen"]>(async () => []),
     findByUserId: vi.fn<MissionDao["findByUserId"]>(async () => []),
     findByAwardedPilotId: vi.fn<MissionDao["findByAwardedPilotId"]>(async () => []),
+    findOverdue: vi.fn<MissionDao["findOverdue"]>(async () => []),
     invalidateLists: vi.fn<MissionDao["invalidateLists"]>(),
     invalidate: vi.fn<MissionDao["invalidate"]>(),
     save: vi.fn<MissionDao["save"]>(),
@@ -418,5 +421,82 @@ describe("CachingMissionDao — concurrency and null ids", () => {
 
     expect(delegate.findById).not.toHaveBeenCalled();
     expect(delegate.findFresh).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Ports `overdueSweepIsNotCached`, which asserts one thing — two calls reach
+ * the delegate twice. The cases below keep that one and add the rest of what
+ * "never cached" has to mean for this decorator, because unlike Spring's
+ * `@Cacheable` (where a method with no annotation simply cannot cache) here
+ * *every* read is hand-written, so a pass-through is a claim about three
+ * separate caches' worth of behaviour rather than an absent annotation:
+ *
+ * - it must not answer from the list cache (hence: called twice),
+ * - it must not *populate* either cache — a sweep of the whole overdue backlog
+ *   would otherwise evict the working set from a size-bounded entity cache, and
+ *   leave a list entry that every later write has to clear,
+ * - it must not read the entity cache either, so a mission the sweep hands to
+ *   the notifier is always a freshly loaded row.
+ */
+describe("CachingMissionDao — the overdue sweep is a pure pass-through", () => {
+  const CUTOFF = new Date("2026-03-01T00:00:00Z");
+
+  it("hits the delegate on every call", async () => {
+    delegate.findOverdue.mockResolvedValue([mission(1)]);
+
+    await cache.findOverdue(["AWARDED"], CUTOFF);
+    await cache.findOverdue(["AWARDED"], CUTOFF);
+
+    expect(delegate.findOverdue).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes the caller's statuses and cutoff through unchanged", async () => {
+    // Which statuses are swept is the scheduler's policy, and this layer is not
+    // allowed to have an opinion about it — not even a canonicalising one, the
+    // way the open-feed key sorts its status set.
+    await cache.findOverdue(["AWARDED", "IN_PROGRESS"], CUTOFF);
+
+    expect(delegate.findOverdue).toHaveBeenCalledWith(["AWARDED", "IN_PROGRESS"], CUTOFF);
+  });
+
+  it("leaves both caches empty", async () => {
+    delegate.findOverdue.mockResolvedValue([mission(1), mission(2)]);
+    delegate.findById.mockResolvedValue(mission(1));
+
+    await cache.findOverdue(["AWARDED"], CUTOFF);
+
+    expect(cache.entityStats().size).toBe(0);
+    expect(cache.listStats().size).toBe(0);
+    // Nothing was seeded, so the next by-id read is still a miss.
+    await cache.findById(1);
+    expect(delegate.findById).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores an already-cached entity and returns the delegate's own rows", async () => {
+    delegate.findById.mockResolvedValue(mission(1));
+    await cache.findById(1);
+    const swept = [mission(1)];
+    delegate.findOverdue.mockResolvedValue(swept);
+
+    const found = await cache.findOverdue(["AWARDED"], CUTOFF);
+
+    expect(delegate.findOverdue).toHaveBeenCalledTimes(1);
+    // The very instances the delegate returned: no copy layer stands between
+    // the query and the sweep, unlike every cached read on this class.
+    expect(found).toBe(swept);
+    expect(found[0]).toBe(swept[0]);
+  });
+
+  it("creates nothing for a later write to invalidate", async () => {
+    const m = mission(1);
+    delegate.findOverdue.mockResolvedValue([m]);
+    delegate.save.mockResolvedValue(m);
+    await cache.findOverdue(["AWARDED"], CUTOFF);
+
+    await cache.save(m);
+
+    expect(cache.entityStats().size).toBe(0);
+    expect(cache.listStats().size).toBe(0);
   });
 });
