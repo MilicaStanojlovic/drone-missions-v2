@@ -185,7 +185,9 @@ test.describe("Phase 1 auth happy path (live DB)", () => {
     // same one the (app) guard uses — is false, so an anonymous visitor
     // sees the public landing content instead of a role-home redirect.
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Drone Missions" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "The marketplace for drone flight missions" }),
+    ).toBeVisible();
     await expect(page).toHaveURL(/\/$/);
   });
 });
