@@ -37,6 +37,18 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+// Show where this run will apply — host, database, and user (whose
+// `postgres.<project-ref>` suffix identifies the Supabase project) — so a
+// wrong-project or stale-env-var mistake is visible before any DDL runs.
+// Never prints the password.
+{
+  const u = new URL(databaseUrl);
+  const source = process.env.DATABASE_URL ? "environment variable" : ".env.local";
+  console.log(
+    `Target: ${u.hostname}:${u.port || "5432"}/${u.pathname.slice(1)} as ${u.username} (from ${source})`,
+  );
+}
+
 const require = createRequire(join(repoRoot, "package.json"));
 const postgres = require("postgres");
 
