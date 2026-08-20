@@ -32,7 +32,21 @@ test.describe("Phase 0 foundation happy path", () => {
     const response = await page.goto("/");
 
     expect(response?.status()).toBe(200);
-    await expect(page.getByRole("heading", { name: "Drone Missions" })).toBeVisible();
+    // The landing page's `<h1>` (ported from `LandingComponent`); the
+    // scaffolding placeholder's "Drone Missions" heading is gone.
+    await expect(
+      page.getByRole("heading", { name: "The marketplace for drone flight missions" }),
+    ).toBeVisible();
+    // The role cards must pre-select the role on the register page (the
+    // Angular `[queryParams]` contract `register-form.tsx` reads back).
+    await expect(page.getByRole("link", { name: /Continue as Designer/ })).toHaveAttribute(
+      "href",
+      "/register?role=DESIGNER",
+    );
+    await expect(page.getByRole("link", { name: /Continue as Pilot/ })).toHaveAttribute(
+      "href",
+      "/register?role=PILOT",
+    );
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
