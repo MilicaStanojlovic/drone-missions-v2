@@ -12,9 +12,9 @@ invocation**; you never look ahead to later tasks.
 
 ## Repos
 
-- **Target (READ + WRITE):** `/workspace/drone-missionsv2` — the new app. You write here ONLY.
-- **Backend source (READ ONLY):** `/workspace/drone-missions-backend/drone-missions` — Spring Boot ground truth.
-- **Frontend source (READ ONLY):** `/workspace/drone-missions-frontend/drone-missions-frontend` — Angular ground truth.
+- **Target (READ + WRITE):** the repo root (this working directory) — the new app. You write here ONLY.
+- **Backend source (READ ONLY):** `../drone-missions-backend/drone-missions` — Spring Boot ground truth.
+- **Frontend source (READ ONLY):** `../drone-missions-frontend/drone-missions-frontend` — Angular ground truth.
 
 Never create, edit, delete, or run mutating commands against the two source repos. They are
 reference material. Permission rules also enforce this.
@@ -27,14 +27,32 @@ service, DAO, entity, validator, Angular component/service). `MIGRATION_PLAN.md`
 source repos are the ground truth. If they disagree, the source wins — implement what the source
 does and note the discrepancy in your final report.
 
+## UI design ground truth
+
+For any UI work, `design/DroneMissions.dc.html` (pulled from the Claude Design canvas the
+original frontend was built against — see `design/README.md`) is the DESIGN source of truth:
+take design tokens, colors, spacing, and typography from that canvas (Space Grotesk, `#2f6bff`
+primary, `#1b2732` text, `#e5eaf0` borders, etc.), while the Angular components' HTML/CSS remain
+the BEHAVIOR reference. Never invent ad-hoc colors/spacing when the canvas defines them.
+
 ## Target conventions (from MIGRATION_PLAN.md — read it if unsure)
 
 - Hybrid structure: `src/app/` is ROUTING ONLY (thin handlers: parse → validate → service →
-  shape); domain code lives in `src/features/<feature>/` as `*.service.ts`, `*.queries.ts`,
-  `*.schema.ts`, `*.mapper.ts`, `*.types.ts`, `components/`. Shared core in `src/db/` and `src/lib/`.
-- Layering mirrors Spring: route handler = controller, `*.service.ts` = `@Service`,
-  `*.queries.ts` = repository/DAO. Services never touch HTTP types; handlers never touch the DB.
-- `import 'server-only'` at the top of every service/query/db module. No barrel `index.ts` in `features/*`.
+  shape); domain code lives in `src/features/<feature>/`, split by the server/client boundary:
+  `server/` holds `*.service.ts`, `*.queries.ts`, `*.schema.ts`, `*.mapper.ts` (and any other
+  `server-only` module, e.g. `mission.cache.ts`, `overdue-sweep.ts`); the feature root holds
+  `*.types.ts`, `*.client.ts` and isomorphic helpers that client code may import; `components/`
+  holds the React UI. Shared core in `src/db/` and `src/lib/`.
+- Layering mirrors Spring: route handler = controller, `server/*.service.ts` = `@Service`,
+  `server/*.queries.ts` = repository/DAO. Services never touch HTTP types; handlers never touch the DB.
+- `import 'server-only'` at the top of every service/query/db module. Placement follows the
+  module's *runtime*: server-side runtime → `server/`; imported by client code → feature root
+  (some `*.types.ts` carry the marker for their runtime exports yet live at the root because
+  components import them with `import type`, which erases). No barrel `index.ts` in `features/*`.
+- Tests live in the top-level `tests/` tree mirroring `src/` (`tests/features/<f>/server/…`,
+  `tests/app/api/…`, `tests/lib/…`), never beside the module. Vitest only collects `tests/**`.
+- Imports: `@/…` alias for anything crossing a directory boundary; relative only between
+  same-directory siblings (`./schema`, `../mission.client` from `components/`).
 - Validation: Zod schemas (one per request DTO), base shapes via `drizzle-zod`, cross-field rules
   via `.superRefine()`. Mirror every Jakarta Bean Validation rule and custom validator from the source.
 - Errors: throw `AppError` subclasses from `src/lib/errors.ts` (`NotFoundError`→404,

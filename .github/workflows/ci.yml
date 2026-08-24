@@ -1,0 +1,98 @@
+name: CI
+
+# Replaces the Spring/Maven build's Checkstyle + `mvn verify` gate: lint,
+# typecheck, unit/integration tests, and a production build must all pass
+# before a change can merge. The job runs a real Postgres service, applies
+# the Flyway V1-V18 migrations to it, and points the live-DB integration
+# suites and the schema drift guard (`pnpm db:check`, see
+# scripts/check-schema-drift.mjs) at it — the same environment the app
+# runs against locally via docker-compose.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    # Real Postgres for the live-DB integration suites — the same schema the
+    # app runs on locally (Flyway V1-V18 applied below), so notification/auth
+    # route tests run for real in CI instead of skipping.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dronemissions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm/action-setup@v4 has no built-in default version; it reads the
+      # "packageManager" field from package.json (pinned there to match
+      # pnpm-lock.yaml's lockfileVersion) when no `version:` input is given.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Apply Flyway migrations (V1-V18)
+        run: >-
+          docker run --rm --network host
+          -v ${{ github.workspace }}/db/migration:/flyway/sql
+          flyway/flyway:10
+          -url=jdbc:postgresql://localhost:5432/dronemissions
+          -user=postgres -password=postgres
+          -connectRetries=10 migrate
+
+      - name: Unit / integration tests
+        run: pnpm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dronemissions
+
+      # `next build` evaluates every route module during "Collecting page
+      # data" (see src/app/api/health/route.ts), which imports the fail-fast
+      # Zod env loader in src/lib/env.ts — JWT_SECRET has no default (see
+      # that file's doc comment on why), so the build needs *some* 32-byte+
+      # value present just to get past module evaluation. Same fixture
+      # pattern as the Dockerfile's build stage and playwright.config.ts's
+      # webServer env; never used to sign a real token.
+      - name: Build
+        run: pnpm build
+        env:
+          JWT_SECRET: ci-build-fixture-jwt-secret-not-a-real-secret-32bytes
+
+      # Drift guard now runs against the job's own freshly-Flyway-migrated
+      # service DB — exactly the "schema.ts mirrors the migrations" contract.
+      - name: Schema drift check
+        run: pnpm db:check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dronemissions

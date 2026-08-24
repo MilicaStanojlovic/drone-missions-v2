@@ -104,11 +104,15 @@ drone-missions/
 │  │
 │  ├─ features/                       # DOMAIN CODE grouped BY FEATURE (hybrid core)
 │  │  ├─ missions/
-│  │  │  ├─ mission.service.ts        #   business logic          (import 'server-only')
-│  │  │  ├─ mission.queries.ts        #   DAO/repository access   (import 'server-only')
-│  │  │  ├─ mission.schema.ts         #   Zod
-│  │  │  ├─ mission.mapper.ts         #   entity → response DTO
-│  │  │  ├─ mission.types.ts
+│  │  │  ├─ server/                   #   EVERY module with (import 'server-only')
+│  │  │  │  ├─ mission.service.ts     #     business logic
+│  │  │  │  ├─ mission.queries.ts     #     DAO/repository access
+│  │  │  │  ├─ mission.schema.ts      #     Zod
+│  │  │  │  ├─ mission.mapper.ts      #     entity → response DTO
+│  │  │  │  └─ mission.cache.ts       #     TTL cache decorator over queries
+│  │  │  ├─ mission.types.ts          #   shared — client imports these as types
+│  │  │  ├─ mission.client.ts         #   browser-side API calls
+│  │  │  ├─ mission.geo.ts            #   isomorphic pure helpers
 │  │  │  └─ components/               #   mission-specific React UI (colocated)
 │  │  ├─ bids/  ratings/  notifications/  users/  auth/  audit/  stats/   (same shape each)
 │  │
@@ -131,15 +135,31 @@ drone-missions/
 │  ├─ emails/                         #   React Email templates
 │  └─ middleware.ts                   #   verify JWT + attach user (replaces SecurityFilterChain)
 │
+├─ tests/                             # ALL Vitest suites, mirroring src/ (like src/test/java)
+│  ├─ features/<f>/server/*.test.ts   #   incl. *.live.test.ts (DATABASE_URL-gated)
+│  ├─ app/api/**/routes.test.ts
+│  ├─ lib/**/*.test.ts
+│  └─ middleware.test.ts
+├─ e2e/                               # Playwright specs (testDir: ./e2e)
 ├─ db/migration/                      # Flyway V1–V18 (unchanged)
 ├─ flyway.conf   drizzle.config.ts   Dockerfile   docker-compose.yml
 ├─ .env.local / .env.example   package.json
 ```
 
 **Rules:** `app/` is routing-only; handlers stay thin; each feature owns its vertical slice;
-`import 'server-only'` on every service/query/db module; no barrel `index.ts` in `features/*`;
-`middleware.ts` under `src/`. Inside every feature the old Spring layering survives:
+`import 'server-only'` on every service/query/db module, and every module whose *runtime* is
+server-side lives in `features/<f>/server/` so the boundary is visible in the tree. Types,
+`*.client.ts` and isomorphic helpers stay at the feature root because client code imports them —
+note several `*.types.ts` keep a `server-only` marker guarding their runtime exports while
+components import them with `import type`, which erases, so "carries the marker" alone does not
+imply "belongs in `server/`". No barrel `index.ts` in `features/*`; `middleware.ts` under `src/`;
+Vitest suites live in `tests/` mirroring `src/`, never beside the module. Inside every feature the
+old Spring layering survives:
 **route → service → queries** = **controller → @Service → repository/MissionDao**.
+
+**Imports:** use the `@/…` alias for anything crossing a directory boundary; relative imports are
+for same-directory siblings only (`./schema` in `db/client.ts`, `./layout` in `emails/*`,
+`../mission.client` from a feature's `components/`).
 
 ---
 
@@ -171,9 +191,9 @@ phase list below already follows this (each phase = one vertical).
 **Sandbox layout — read the source, write the target.**
 
 ```
-C:\workspace\drone-missionsv2      ← rw   the new Next.js app — agents WRITE here ONLY
-…\drone-missions-backend                       ← ro   Spring source of truth — READ only
-…\drone-missions-frontend                      ← ro   React/Angular source of truth — READ only
+.                             ← rw   the new Next.js app — agents WRITE here ONLY
+../drone-missions-backend     ← ro   Spring source of truth — READ only
+../drone-missions-frontend    ← ro   React/Angular source of truth — READ only
 ```
 
 Every agent may **READ all three**; every agent **WRITES only to the first**. Enforce read-only on

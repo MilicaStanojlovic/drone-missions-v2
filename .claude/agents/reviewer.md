@@ -11,9 +11,9 @@ Supabase-Postgres app. You report findings; you **never edit files**.
 
 ## Repos
 
-- **Target under review:** `/workspace/drone-missionsv2`
-- **Backend ground truth (read-only):** `/workspace/drone-missions-backend/drone-missions`
-- **Frontend ground truth (read-only):** `/workspace/drone-missions-frontend/drone-missions-frontend`
+- **Target under review:** the repo root (this working directory)
+- **Backend ground truth (read-only):** `../drone-missions-backend/drone-missions`
+- **Frontend ground truth (read-only):** `../drone-missions-frontend/drone-missions-frontend`
 
 ## Scope
 
@@ -50,15 +50,24 @@ weakened behavior is a finding even if the new code "works":
 - **Flyway migrations are copied verbatim** — any edit to a `V*__*.sql` file relative to the
   backend's `src/main/resources/db/migration` is a blocking finding. `src/db/schema.ts` must
   mirror the migrated schema (no invented columns/tables).
-- **Structure** — `src/app/` routing-only, thin handlers; domain logic in `features/<f>/`
-  service/queries; `import 'server-only'` present on every service/query/db module; no barrel
-  `index.ts` under `features/*`; services free of HTTP/Next types.
+- **Structure** — `MIGRATION_PLAN.md` §4 is normative; read it before flagging layout. Check:
+  `src/app/` routing-only with thin handlers; domain logic in `features/<f>/server/`
+  (service/queries/schema/mapper); `import 'server-only'` present on every service/query/db
+  module, and no server-runtime module left outside `server/` (types/client/isomorphic helpers
+  belong at the feature root — a `server-only` marker on a `*.types.ts` is not by itself a
+  misplacement); Vitest suites under `tests/` mirroring `src/`, never beside the module;
+  `@/…` for imports crossing a directory (relative between same-directory siblings is fine);
+  no barrel `index.ts` under `features/*`; services free of HTTP/Next types.
 - **Write-boundary** — the diff must contain NO change under the two source repos. Check
   `git -C <source repo> status` for both; any dirt there is a blocking finding.
 - **Secrets** — any literal-looking credential, SMTP password, API key, or real connection string
   in the diff (or in `.env.example`) is a **blocking** finding. `.env.local` must be gitignored.
 - **Locked stack** — flag substitutions of the locked choices (e.g. Supabase Auth/RLS, Prisma,
   NextAuth, drizzle-kit migrations) — see MIGRATION_PLAN.md §3.
+- **Design parity (UI work)** — `design/DroneMissions.dc.html` (Claude Design canvas, see
+  `design/README.md`) is the visual source of truth: flag ad-hoc colors/spacing/typography that
+  contradict the canvas tokens (Space Grotesk, `#2f6bff` primary, `#1b2732` text, `#e5eaf0`
+  borders, page gradient `#f2f5f9→#e9edf2`) where the canvas defines them.
 - **Tests** — the phase ships Vitest coverage (and a Playwright happy-path where the phase's
   "Done when" implies UI flow). JUnit cases in the source for the ported behavior should have
   mirrored Vitest cases; list any that don't.

@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#eef1f5;}
+  body{font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#1b2732;}
+  a{color:#2f6bff;text-decoration:none;}
+  a:hover{color:#1e5ae6;}
+  input,textarea,button{font-family:inherit;}
+  input::placeholder,textarea::placeholder{color:#9aa8b6;}
+  input[type=date]{color-scheme:light;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:#d2dae2;border-radius:6px;}
+  ::-webkit-scrollbar-thumb:hover{background:#bcc7d2;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  @keyframes dash{to{stroke-dashoffset:-32;}}
+  @keyframes toastin{from{opacity:0;transform:translate(-50%,14px);}to{opacity:1;transform:translate(-50%,0);}}
+  @keyframes fadeup{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:linear-gradient(180deg,#f2f5f9,#e9edf2);color:#1b2732;">
+
+  <sc-if value="{{ showTopbar }}" hint-placeholder-val="{{ true }}">
+    <header style="height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #e5eaf0;background:#ffffff;position:sticky;top:0;z-index:40;box-shadow:0 1px 3px rgba(20,35,55,.04);">
+      <div style="display:flex;align-items:center;gap:30px;">
+        <div onClick="{{ homeClick }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;">
+          <div style="width:15px;height:15px;transform:rotate(45deg);background:#2f6bff;box-shadow:0 3px 10px rgba(47,107,255,.4);"></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:.19em;font-size:13px;color:#1b2732;">DRONEMISSIONS</span>
+        </div>
+        <nav style="display:flex;align-items:center;gap:4px;">
+          <sc-if value="{{ isDesigner }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ goDashboard }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">My Missions</button>
+            <button onClick="{{ goNew }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">New Mission</button>
+          </sc-if>
+          <sc-if value="{{ isPilot }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ goFeedOpen }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">Browse</button>
+            <button onClick="{{ goFeedMine }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">My Bids &amp; Jobs</button>
+          </sc-if>
+          <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ goAdminOverview }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">Overview</button>
+            <button onClick="{{ goAdminMissions }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">Missions</button>
+            <button onClick="{{ goAdminUsers }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#f0f3f7;color:#1b2732;">Users</button>
+            <button onClick="{{ goAdminAudit }}" style="background:transparent;border:none;color:#5c6b7a;font-size:13px;font-weight:500;padding:7px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;" style-hover="background:#f0f3f7;color:#1b2732;">Audit log</button>
+          </sc-if>
+        </nav>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button onClick="{{ resetDemo }}" title="Reset all demo data" style="background:transparent;border:none;color:#a2afbc;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;cursor:pointer;" style-hover="color:#5c6b7a;">RESET DEMO</button>
+        <div style="display:flex;align-items:center;gap:9px;padding:5px 13px 5px 11px;background:#f4f7fa;border:1px solid #e5eaf0;border-radius:22px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:{{ roleColorObj.bg }};box-shadow:0 0 0 3px {{ roleColorObj.halo }};"></span>
+          <div style="line-height:1.15;">
+            <div style="font-size:12.5px;font-weight:600;color:#1b2732;">{{ roleName }}</div>
+            <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;color:#93a1b0;text-transform:uppercase;">{{ roleLabel }}</div>
+          </div>
+        </div>
+        <button onClick="{{ switchRole }}" style="background:#ffffff;border:1px solid #dbe2ea;color:#5c6b7a;font-size:12px;font-weight:500;padding:7px 13px;border-radius:7px;cursor:pointer;" style-hover="border-color:#c3ccd6;color:#1b2732;">Switch role</button>
+      </div>
+    </header>
+  </sc-if>
+
+  <!-- ============ LANDING ============ -->
+  <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+    <div style="position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:40px 20px;">
+      <div aria-hidden="true" style="position:absolute;inset:0;background-image:linear-gradient(rgba(40,70,100,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(40,70,100,.045) 1px,transparent 1px);background-size:28px 28px;background-color:#eef1f5;"></div>
+      <div aria-hidden="true" style="position:absolute;inset:0;background:radial-gradient(1100px 620px at 50% 30%,rgba(47,107,255,.10),transparent 68%);"></div>
+
+      <div style="position:relative;text-align:center;max-width:880px;">
+        <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:22px;">
+          <div style="width:22px;height:22px;transform:rotate(45deg);background:#2f6bff;box-shadow:0 6px 18px rgba(47,107,255,.4);"></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:.24em;font-size:16px;color:#1b2732;">DRONEMISSIONS</span>
+        </div>
+        <h1 style="font-size:44px;line-height:1.08;font-weight:700;margin:0 0 16px;letter-spacing:-0.02em;text-wrap:balance;color:#141e28;">The marketplace for<br>drone flight missions</h1>
+        <p style="font-size:16px;color:#5c6b7a;max-width:560px;margin:0 auto 40px;line-height:1.55;text-wrap:pretty;">Plan a mission on the map, publish it for bids, and award the job to a licensed pilot. Choose how you want to enter the demo.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:0 auto;">
+          <button onClick="{{ pickDesigner }}" style="text-align:left;background:#ffffff;border:1px solid #e5eaf0;border-radius:16px;padding:26px 24px;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;box-shadow:0 1px 2px rgba(20,35,55,.04),0 10px 30px rgba(20,35,55,.05);" style-hover="border-color:#2f6bff;transform:translateY(-2px);box-shadow:0 12px 34px rgba(47,107,255,.14);">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px;">
+              <div style="width:38px;height:38px;border-radius:10px;background:#eaf0ff;border:1px solid #d3e0ff;display:flex;align-items:center;justify-content:center;">
+                <div style="width:12px;height:12px;transform:rotate(45deg);border:2px solid #2f6bff;"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#2f6bff;">ROLE 01</div>
+            </div>
+            <div style="font-size:20px;font-weight:600;margin-bottom:8px;color:#141e28;">Mission Designer</div>
+            <p style="font-size:13.5px;color:#5c6b7a;line-height:1.55;margin:0 0 16px;">Plot waypoints on the map, publish the job, review incoming bids and award it to one pilot.</p>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#2f6bff;letter-spacing:.04em;">Enter as Designer &nbsp;→</div>
+          </button>
+
+          <button onClick="{{ pickPilot }}" style="text-align:left;background:#ffffff;border:1px solid #e5eaf0;border-radius:16px;padding:26px 24px;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;box-shadow:0 1px 2px rgba(20,35,55,.04),0 10px 30px rgba(20,35,55,.05);" style-hover="border-color:#12a06a;transform:translateY(-2px);box-shadow:0 12px 34px rgba(18,160,106,.14);">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px;">
+              <div style="width:38px;height:38px;border-radius:10px;background:#e5f6ee;border:1px solid #c5ecda;display:flex;align-items:center;justify-content:center;">
+                <div style="width:13px;height:13px;border-radius:50%;border:2px solid #12a06a;"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#12a06a;">ROLE 02</div>
+            </div>
+            <div style="font-size:20px;font-weight:600;margin-bottom:8px;color:#141e28;">Pilot</div>
+            <p style="font-size:13.5px;color:#5c6b7a;line-height:1.55;margin:0 0 16px;">Browse published missions, study the flight plan, place a bid, and fly the jobs you win.</p>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#12a06a;letter-spacing:.04em;">Enter as Pilot &nbsp;→</div>
+          </button>
+        </div>
+
+        <button onClick="{{ pickAdmin }}" style="margin:18px auto 0;display:flex;align-items:center;justify-content:center;gap:10px;background:#ffffff;border:1px solid #e5eaf0;border-radius:12px;padding:13px 22px;cursor:pointer;max-width:760px;width:100%;transition:border-color .15s,box-shadow .15s;box-shadow:0 1px 2px rgba(20,35,55,.04);" style-hover="border-color:#6d5ef0;box-shadow:0 8px 22px rgba(109,94,240,.14);">
+          <span style="width:22px;height:22px;border-radius:6px;background:#f3f1ff;border:1px solid #ddd6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <span style="width:8px;height:8px;border-radius:2px;background:#6d5ef0;"></span>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:#141e28;">Platform Admin</span>
+          <span style="font-size:13px;color:#6b7c8d;">— oversight, moderation &amp; audit</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6d5ef0;margin-left:4px;">→</span>
+        </button>
+
+        <div style="margin-top:44px;display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;">
+          <sc-for list="{{ lifecycleChips }}" as="c" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;">
+              <span style="display:inline-flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;color:#6b7c8d;">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ c.color }};"></span>{{ c.label }}
+              </span>
+              <sc-if value="{{ c.notLast }}"><span style="color:#c3ccd6;margin:0 12px;font-size:11px;">›</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DESIGNER DASHBOARD ============ -->
+  <sc-if value="{{ isDesignerDash }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1200px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:26px;">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#2f6bff;margin-bottom:8px;">MISSION DESIGNER</div>
+          <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">My Missions</h1>
+        </div>
+        <button onClick="{{ goNew }}" style="display:inline-flex;align-items:center;gap:9px;background:#2f6bff;color:#fff;border:none;border-radius:9px;padding:11px 18px;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 4px 16px rgba(47,107,255,.28);" style-hover="background:#1e5ae6;">
+          <span style="font-size:17px;line-height:1;">+</span> New Mission
+        </button>
+      </div>
+
+      <sc-if value="{{ mySuspended }}">
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fdf3f2;border:1px solid #f0d5d3;border-left:3px solid #e04a3f;border-radius:11px;padding:15px 18px;margin-bottom:22px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#e04a3f;flex-shrink:0;margin-top:6px;"></span>
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#c0574d;margin-bottom:5px;">ACCOUNT SUSPENDED</div>
+            <div style="font-size:13.5px;color:#8c463e;line-height:1.5;">{{ suspendMsg }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:30px;">
+        <sc-for list="{{ dashStats }}" as="s" hint-placeholder-count="4">
+          <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+            <div style="font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ s.color }};line-height:1;">{{ s.value }}</div>
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:#93a1b0;margin-top:8px;">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ dashEmpty }}">
+        <div style="text-align:center;padding:70px 20px;border:1px dashed #cdd6df;border-radius:14px;color:#93a1b0;background:#fff;">
+          <div style="font-size:16px;margin-bottom:6px;color:#5c6b7a;">No missions yet</div>
+          <div style="font-size:13.5px;">Create your first mission to start collecting bids.</div>
+        </div>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+        <sc-for list="{{ dashMissions }}" as="m" hint-placeholder-count="4">
+          <button onClick="{{ m.open }}" style="text-align:left;display:flex;flex-direction:column;background:#ffffff;border:1px solid #e8edf2;border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;padding:0;box-shadow:0 1px 2px rgba(20,35,55,.04);" style-hover="border-color:#2f6bff;transform:translateY(-2px);box-shadow:0 12px 28px rgba(20,35,55,.10);">
+            <div style="aspect-ratio:1000/640;position:relative;background:#eef1ec;border-bottom:1px solid #e8edf2;">
+              {{ m.thumb }}
+              <div style="position:absolute;top:10px;right:10px;">
+                <span style="{{ m.badgeStyle }}"><span style="{{ m.dotStyle }}"></span>{{ m.statusLabel }}</span>
+              </div>
+            </div>
+            <div style="padding:15px 16px 16px;flex:1;display:flex;flex-direction:column;">
+              <div style="font-size:15px;font-weight:600;line-height:1.3;margin-bottom:5px;text-wrap:pretty;color:#1b2732;">{{ m.title }}</div>
+              <div style="font-size:12px;color:#6b7c8d;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;">{{ m.location }}</div>
+              <div style="display:flex;gap:16px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;">
+                <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Window</div><div style="font-size:12.5px;color:#43525f;margin-top:3px;">{{ m.dates }}</div></div>
+                <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Path</div><div style="font-size:12.5px;color:#43525f;margin-top:3px;">{{ m.distance }}</div></div>
+              </div>
+              <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #eef2f6;">
+                <span style="font-size:12px;color:#5c6b7a;">{{ m.bidCountText }}</span>
+                <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:#93a1b0;">{{ m.deadline }}</span>
+              </div>
+            </div>
+          </button>
+        </sc-for>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ============ MISSION EDITOR ============ -->
+  <sc-if value="{{ isEditor }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;height:calc(100vh - 60px);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px;border-bottom:1px solid #e5eaf0;background:#ffffff;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <button onClick="{{ cancelEdit }}" style="background:#ffffff;border:1px solid #dbe2ea;color:#5c6b7a;font-size:13px;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="border-color:#c3ccd6;color:#1b2732;">← Back</button>
+          <div>
+            <div style="font-size:17px;font-weight:600;color:#141e28;">{{ editorTitleHeader }}</div>
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;color:#93a1b0;margin-top:2px;">DRAG NODES TO ADJUST · CLICK MAP TO ADD</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <sc-if value="{{ editorShowDraftBtn }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ saveDraft }}" style="background:#f2f5f8;border:1px solid #dbe2ea;color:#43525f;font-size:13.5px;font-weight:500;padding:9px 16px;border-radius:8px;cursor:pointer;" style-hover="border-color:#c3ccd6;background:#eaeff4;">Save as Draft</button>
+          </sc-if>
+          <button onClick="{{ publishMission }}" style="background:{{ publishBtnStyle.bg }};color:#fff;border:none;font-size:13.5px;font-weight:600;padding:9px 18px;border-radius:8px;cursor:{{ publishBtnStyle.cursor }};opacity:{{ publishBtnStyle.opacity }};box-shadow:0 3px 12px rgba(47,107,255,.26);">{{ editorPublishLabel }}</button>
+        </div>
+      </div>
+
+      <div style="flex:1;display:grid;grid-template-columns:1fr 384px;min-height:0;">
+        <!-- map pane -->
+        <div style="display:flex;flex-direction:column;min-height:0;background:#f5f7fa;border-right:1px solid #e5eaf0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-bottom:1px solid #e8edf2;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:6px;background:#f0f3f7;border:1px solid #e2e8ef;border-radius:9px;padding:3px;">
+                <button onClick="{{ setAddMode }}" style="{{ addBtnStyle }}">+ Add node</button>
+                <button onClick="{{ setSelectMode }}" style="{{ selectBtnStyle }}">Move / edit</button>
+                <button onClick="{{ setPanMode }}" style="{{ panBtnStyle }}">Pan</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#93a1b0;">ZONE</span>
+                <div style="display:flex;align-items:center;gap:4px;background:#f0f3f7;border:1px solid #e2e8ef;border-radius:8px;padding:3px;">
+                  <button onClick="{{ setZoneCircle }}" style="{{ zoneCircleStyle }}">◯ Circle</button>
+                  <button onClick="{{ setZonePolygon }}" style="{{ zonePolyStyle }}">⬡ Polygon</button>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button onClick="{{ editorUndo }}" style="background:#ffffff;border:1px solid #dbe2ea;color:#5c6b7a;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:pointer;" style-hover="border-color:#c3ccd6;">Undo</button>
+              <button onClick="{{ editorClear }}" style="background:#ffffff;border:1px solid #f0d5d3;color:#c0574d;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:pointer;" style-hover="border-color:#e5b0ab;background:#fdf3f2;">Clear</button>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:18px;min-height:0;overflow:hidden;">
+            <div style="position:relative;width:100%;max-width:calc((100vh - 244px) * 1.5625);aspect-ratio:1000/640;border:1px solid #d3dbe3;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(20,35,55,.06),0 14px 40px rgba(20,35,55,.12);">
+              {{ editorMapEl }}
+              <div style="position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.92);border:1px solid #e2e8ef;border-radius:8px;padding:6px 11px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5c6b7a;box-shadow:0 1px 3px rgba(20,35,55,.08);">
+                <span style="width:13px;height:13px;border-radius:3px;background:rgba(109,94,240,.14);border:1px dashed #6d5ef0;flex-shrink:0;"></span> Flight zone — keep waypoints inside
+              </div>
+              <div style="position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px;">
+                <button onClick="{{ zoomIn }}" title="Zoom in" style="width:34px;height:34px;background:#fff;border:1px solid #dbe2ea;border-radius:8px;color:#43525f;font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(20,35,55,.12);" style-hover="border-color:#2f6bff;color:#2f6bff;">+</button>
+                <button onClick="{{ zoomOut }}" title="Zoom out" style="width:34px;height:34px;background:#fff;border:1px solid #dbe2ea;border-radius:8px;color:#43525f;font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(20,35,55,.12);" style-hover="border-color:#2f6bff;color:#2f6bff;">−</button>
+                <button onClick="{{ zoomReset }}" title="Reset view" style="width:34px;height:34px;background:#fff;border:1px solid #dbe2ea;border-radius:8px;color:#43525f;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(20,35,55,.12);" style-hover="border-color:#2f6bff;color:#2f6bff;">⤢</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:22px;padding:11px 18px;border-top:1px solid #e8edf2;font-family:'IBM Plex Mono',monospace;font-size:11.5px;flex-wrap:wrap;background:#fff;">
+            <div><span style="color:#a2afbc;">WAYPOINTS </span><span style="color:#2f6bff;font-weight:600;">{{ editorWp }}</span></div>
+            <div><span style="color:#a2afbc;">PATH </span><span style="color:#1b2732;">{{ editorDistance }}</span></div>
+            <div><span style="color:#a2afbc;">EST. FLIGHT </span><span style="color:#1b2732;">{{ editorDuration }}</span></div>
+            <div style="margin-left:auto;"><span style="color:#a2afbc;">CURSOR </span><span ref="{{ setCoordEl }}" style="color:#5c6b7a;">0000 · 0000</span></div>
+          </div>
+        </div>
+
+        <!-- form pane -->
+        <div style="overflow-y:auto;padding:22px 22px 40px;background:#ffffff;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:#a2afbc;margin-bottom:18px;">MISSION BRIEF</div>
+
+          <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">Title</label>
+          <input value="{{ editor.title }}" onInput="{{ onTitle }}" placeholder="e.g. Rooftop Solar Inspection" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:14px;padding:11px 12px;outline:none;margin-bottom:18px;" style-focus="border-color:#2f6bff;background:#fff;">
+
+          <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">Location</label>
+          <input value="{{ editor.location }}" onInput="{{ onLocation }}" placeholder="City, State" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:14px;padding:11px 12px;outline:none;margin-bottom:18px;" style-focus="border-color:#2f6bff;background:#fff;">
+
+          <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">Description</label>
+          <textarea value="{{ editor.description }}" onInput="{{ onDesc }}" placeholder="What the pilot needs to know — altitude, pattern, constraints…" rows="4" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:14px;padding:11px 12px;outline:none;margin-bottom:18px;resize:vertical;line-height:1.5;" style-focus="border-color:#2f6bff;background:#fff;"></textarea>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+            <div>
+              <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">Start date</label>
+              <input type="date" value="{{ editor.startDate }}" onInput="{{ onStart }}" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:13.5px;padding:10px 11px;outline:none;" style-focus="border-color:#2f6bff;background:#fff;">
+            </div>
+            <div>
+              <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">End date</label>
+              <input type="date" value="{{ editor.endDate }}" onInput="{{ onEnd }}" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:13.5px;padding:10px 11px;outline:none;" style-focus="border-color:#2f6bff;background:#fff;">
+            </div>
+          </div>
+
+          <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:7px;">Bidding deadline</label>
+          <input type="date" value="{{ editor.biddingDeadline }}" onInput="{{ onDeadline }}" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:8px;color:#1b2732;font-size:13.5px;padding:10px 11px;outline:none;margin-bottom:20px;" style-focus="border-color:#2f6bff;background:#fff;">
+
+          <div style="background:#f7f9fb;border:1px solid #e8edf2;border-radius:10px;padding:14px 15px;font-size:12.5px;color:#5c6b7a;line-height:1.55;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#a2afbc;margin-bottom:7px;">TO PUBLISH</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="color:{{ checkTitle.color }};font-weight:600;">{{ checkTitle.mark }}</span> A mission title</div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:{{ checkWp.color }};font-weight:600;">{{ checkWp.mark }}</span> At least 2 waypoints on the map</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ MISSION DETAIL — DESIGNER ============ -->
+  <sc-if value="{{ isDesignerDetail }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1240px;margin:0 auto;padding:22px 24px 72px;animation:fadeup .25s ease;">
+      <button onClick="{{ backFromDetail }}" style="background:transparent;border:none;color:#6b7c8d;font-size:13px;padding:6px 0;cursor:pointer;margin-bottom:14px;" style-hover="color:#1b2732;">← My Missions</button>
+
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+            <span style="{{ activeVm.badgeStyle }}"><span style="{{ activeVm.dotStyle }}"></span>{{ activeVm.statusLabel }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#93a1b0;">{{ activeVm.location }}</span>
+          </div>
+          <h1 style="font-size:26px;font-weight:700;margin:0;letter-spacing:-0.01em;text-wrap:pretty;max-width:640px;color:#141e28;">{{ activeVm.title }}</h1>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;">
+          <sc-if value="{{ canEditActive }}"><button onClick="{{ actEdit }}" style="background:#f2f5f8;border:1px solid #dbe2ea;color:#43525f;font-size:13px;padding:9px 15px;border-radius:8px;cursor:pointer;" style-hover="border-color:#c3ccd6;">Edit</button></sc-if>
+          <sc-if value="{{ canPublishActive }}"><button onClick="{{ actPublish }}" style="background:#2f6bff;border:none;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;" style-hover="background:#1e5ae6;">Publish</button></sc-if>
+          <sc-if value="{{ canCancelActive }}"><button onClick="{{ actCancel }}" style="background:#ffffff;border:1px solid #f0d5d3;color:#c0574d;font-size:13px;padding:9px 15px;border-radius:8px;cursor:pointer;" style-hover="border-color:#e5b0ab;background:#fdf3f2;">Cancel mission</button></sc-if>
+        </div>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:16px 20px;margin-bottom:20px;overflow-x:auto;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <div style="display:flex;align-items:center;min-width:560px;">
+          <sc-for list="{{ activeSteps }}" as="st" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <div style="{{ st.dotStyle }}"></div>
+                <span style="{{ st.labelStyle }}">{{ st.label }}</span>
+              </div>
+              <sc-if value="{{ st.notLast }}"><div style="{{ st.lineStyle }}"></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start;">
+        <div>
+          
+          <div style="aspect-ratio:1000/640;border:1px solid #d3dbe3;border-radius:12px;overflow:hidden;background:#eef1ec;box-shadow:0 1px 2px rgba(20,35,55,.05),0 12px 34px rgba(20,35,55,.10);">{{ detailMapEl }}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px;">
+            <sc-for list="{{ activeVm.telemetry }}" as="t" hint-placeholder-count="4">
+              <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:10px;padding:12px 13px;font-family:'IBM Plex Mono',monospace;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+                <div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">{{ t.label }}</div>
+                <div style="font-size:15px;color:#1b2732;margin-top:5px;">{{ t.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:18px 20px;margin-top:14px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:10px;">BRIEF</div>
+            <p style="font-size:14px;color:#43525f;line-height:1.6;margin:0 0 16px;text-wrap:pretty;">{{ activeVm.description }}</p>
+            <div style="display:flex;gap:30px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;">
+              <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Flight window</div><div style="font-size:13.5px;color:#1b2732;margin-top:4px;">{{ activeVm.dates }}</div></div>
+              <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Bidding</div><div style="font-size:13.5px;color:#1b2732;margin-top:4px;">{{ activeVm.deadline }}</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- bids panel -->
+        <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(20,35,55,.04),0 8px 24px rgba(20,35,55,.05);">
+          <div style="padding:16px 18px;border-bottom:1px solid #eef2f6;display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-weight:600;font-size:15px;color:#1b2732;">Bids</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#93a1b0;">{{ activeVm.bidCountText }}</span>
+          </div>
+
+          <sc-if value="{{ activeBidsEmpty }}">
+            <div style="padding:40px 20px;text-align:center;color:#93a1b0;font-size:13.5px;">No bids have come in yet.</div>
+          </sc-if>
+
+          <div>
+            <sc-for list="{{ activeBids }}" as="b" hint-placeholder-count="3">
+              <div style="{{ b.rowStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <div style="min-width:0;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-weight:600;font-size:14px;color:#1b2732;">{{ b.pilot }}</span>
+                      <sc-if value="{{ b.isAccepted }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:#7c5cff;border:1px solid #cfc4ff;background:#f3f1ff;border-radius:20px;padding:2px 7px;">AWARDED</span></sc-if>
+                      <sc-if value="{{ b.isDeclined }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:#93a1b0;border:1px solid #dbe2ea;border-radius:20px;padding:2px 7px;">DECLINED</span></sc-if>
+                    </div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#93a1b0;margin-top:4px;">{{ b.when }}</div>
+                  </div>
+                  <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;color:{{ b.priceColor }};">{{ b.price }}</div>
+                  </div>
+                </div>
+                <sc-if value="{{ b.canAward }}">
+                  <button onClick="{{ b.award }}" style="margin-top:11px;width:100%;background:#f3f1ff;border:1px solid #ddd6ff;color:#6d4ff0;font-size:13px;font-weight:600;padding:9px;border-radius:8px;cursor:pointer;" style-hover="background:#7c5cff;color:#fff;border-color:#7c5cff;">Award to {{ b.firstName }}</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ============ PILOT FEED ============ -->
+  <sc-if value="{{ isPilotFeed }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1200px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="margin-bottom:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#12a06a;margin-bottom:8px;">PILOT</div>
+        <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">{{ feedTitle }}</h1>
+      </div>
+
+      <sc-if value="{{ mySuspended }}">
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fdf3f2;border:1px solid #f0d5d3;border-left:3px solid #e04a3f;border-radius:11px;padding:15px 18px;margin-bottom:22px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#e04a3f;flex-shrink:0;margin-top:6px;"></span>
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#c0574d;margin-bottom:5px;">ACCOUNT SUSPENDED</div>
+            <div style="font-size:13.5px;color:#8c463e;line-height:1.5;">{{ suspendMsg }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px;">
+        <div style="display:flex;background:#f0f3f7;border:1px solid #e2e8ef;border-radius:9px;padding:3px;">
+          <button onClick="{{ setTabOpen }}" style="{{ tabOpenStyle }}">Open missions</button>
+          <button onClick="{{ setTabMine }}" style="{{ tabMineStyle }}">My bids &amp; jobs</button>
+        </div>
+        <sc-if value="{{ showOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="position:relative;">
+            <input value="{{ search }}" onInput="{{ onSearch }}" placeholder="Search missions by name…" style="width:280px;background:#ffffff;border:1px solid #dbe2ea;border-radius:9px;color:#1b2732;font-size:13.5px;padding:10px 12px 10px 34px;outline:none;" style-focus="border-color:#12a06a;">
+            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#a2afbc;font-size:13px;">⚲</span>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ feedEmpty }}">
+        <div style="text-align:center;padding:70px 20px;border:1px dashed #cdd6df;border-radius:14px;color:#93a1b0;background:#fff;">
+          <div style="font-size:16px;margin-bottom:6px;color:#5c6b7a;">{{ feedEmptyTitle }}</div>
+          <div style="font-size:13.5px;">{{ feedEmptySub }}</div>
+        </div>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+        <sc-for list="{{ feedList }}" as="m" hint-placeholder-count="3">
+          <button onClick="{{ m.open }}" style="text-align:left;display:flex;flex-direction:column;background:#ffffff;border:1px solid #e8edf2;border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;padding:0;box-shadow:0 1px 2px rgba(20,35,55,.04);" style-hover="border-color:#12a06a;transform:translateY(-2px);box-shadow:0 12px 28px rgba(20,35,55,.10);">
+            <div style="aspect-ratio:1000/640;position:relative;background:#eef1ec;border-bottom:1px solid #e8edf2;">
+              {{ m.thumb }}
+              <div style="position:absolute;top:10px;right:10px;"><span style="{{ m.badgeStyle }}"><span style="{{ m.dotStyle }}"></span>{{ m.statusLabel }}</span></div>
+              <sc-if value="{{ m.hasMyBid }}"><div style="position:absolute;bottom:10px;left:10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:#e5f6ee;border:1px solid #bfe8d5;color:#0f8c5c;padding:3px 9px;border-radius:20px;">{{ m.myBidText }}</div></sc-if>
+            </div>
+            <div style="padding:15px 16px 16px;flex:1;display:flex;flex-direction:column;">
+              <div style="font-size:15px;font-weight:600;line-height:1.3;margin-bottom:5px;text-wrap:pretty;color:#1b2732;">{{ m.title }}</div>
+              <div style="font-size:12px;color:#6b7c8d;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;">by {{ m.designer }} · {{ m.location }}</div>
+              <div style="display:flex;gap:16px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;">
+                <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Window</div><div style="font-size:12.5px;color:#43525f;margin-top:3px;">{{ m.dates }}</div></div>
+                <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Path</div><div style="font-size:12.5px;color:#43525f;margin-top:3px;">{{ m.distance }}</div></div>
+              </div>
+              <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #eef2f6;">
+                <span style="font-size:12px;color:#5c6b7a;">{{ m.bidCountText }}</span>
+                <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:#93a1b0;">{{ m.deadline }}</span>
+              </div>
+            </div>
+          </button>
+        </sc-for>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ============ MISSION DETAIL — PILOT ============ -->
+  <sc-if value="{{ isPilotDetail }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1240px;margin:0 auto;padding:22px 24px 72px;animation:fadeup .25s ease;">
+      <button onClick="{{ backFromDetail }}" style="background:transparent;border:none;color:#6b7c8d;font-size:13px;padding:6px 0;cursor:pointer;margin-bottom:14px;" style-hover="color:#1b2732;">← Back to feed</button>
+
+      <div style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+          <span style="{{ activeVm.badgeStyle }}"><span style="{{ activeVm.dotStyle }}"></span>{{ activeVm.statusLabel }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#93a1b0;">by {{ activeVm.designer }} · {{ activeVm.location }}</span>
+        </div>
+        <h1 style="font-size:26px;font-weight:700;margin:0;letter-spacing:-0.01em;text-wrap:pretty;max-width:640px;color:#141e28;">{{ activeVm.title }}</h1>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:16px 20px;margin-bottom:20px;overflow-x:auto;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <div style="display:flex;align-items:center;min-width:560px;">
+          <sc-for list="{{ activeSteps }}" as="st" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;">
+              <div style="display:flex;align-items:center;gap:9px;"><div style="{{ st.dotStyle }}"></div><span style="{{ st.labelStyle }}">{{ st.label }}</span></div>
+              <sc-if value="{{ st.notLast }}"><div style="{{ st.lineStyle }}"></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start;">
+        <div>
+          
+          <div style="aspect-ratio:1000/640;border:1px solid #d3dbe3;border-radius:12px;overflow:hidden;background:#eef1ec;box-shadow:0 1px 2px rgba(20,35,55,.05),0 12px 34px rgba(20,35,55,.10);">{{ detailMapEl }}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px;">
+            <sc-for list="{{ activeVm.telemetry }}" as="t" hint-placeholder-count="4">
+              <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:10px;padding:12px 13px;font-family:'IBM Plex Mono',monospace;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+                <div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">{{ t.label }}</div>
+                <div style="font-size:15px;color:#1b2732;margin-top:5px;">{{ t.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:18px 20px;margin-top:14px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:10px;">BRIEF</div>
+            <p style="font-size:14px;color:#43525f;line-height:1.6;margin:0 0 16px;text-wrap:pretty;">{{ activeVm.description }}</p>
+            <div style="display:flex;gap:30px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;">
+              <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Flight window</div><div style="font-size:13.5px;color:#1b2732;margin-top:4px;">{{ activeVm.dates }}</div></div>
+              <div><div style="font-size:9.5px;letter-spacing:.08em;color:#a2afbc;text-transform:uppercase;">Bidding</div><div style="font-size:13.5px;color:#1b2732;margin-top:4px;">{{ activeVm.deadline }}</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- action panel -->
+        <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:20px;position:sticky;top:76px;box-shadow:0 1px 2px rgba(20,35,55,.04),0 8px 24px rgba(20,35,55,.05);">
+          <!-- awarded to me -->
+          <sc-if value="{{ awardedToMe }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#f3f1ff;border:1px solid #ddd6ff;border-radius:10px;padding:14px 15px;margin-bottom:16px;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#6d4ff0;margin-bottom:5px;">JOB AWARDED TO YOU</div>
+              <div style="font-size:13.5px;color:#4a4066;line-height:1.5;">{{ awardMessage }}</div>
+            </div>
+            <sc-if value="{{ showInProgressBtn }}"><button onClick="{{ markInProgress }}" style="width:100%;background:#2f6bff;border:none;color:#fff;font-size:14px;font-weight:600;padding:12px;border-radius:9px;cursor:pointer;box-shadow:0 3px 12px rgba(47,107,255,.26);" style-hover="background:#1e5ae6;">Start flight — mark In Progress</button></sc-if>
+            <sc-if value="{{ showCompletedBtn }}"><button onClick="{{ markCompleted }}" style="width:100%;background:#12a06a;border:none;color:#fff;font-size:14px;font-weight:600;padding:12px;border-radius:9px;cursor:pointer;box-shadow:0 3px 12px rgba(18,160,106,.26);" style-hover="background:#0f8c5c;">Mark mission Completed</button></sc-if>
+            <sc-if value="{{ isCompletedActive }}"><div style="text-align:center;padding:10px;font-size:13.5px;color:#0f8c5c;font-weight:600;">✓ Mission completed</div></sc-if>
+            <sc-if value="{{ execBlocked }}">
+              <div style="background:#fdf3f2;border:1px solid #f0d5d3;border-radius:10px;padding:14px 15px;">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#c0574d;margin-bottom:6px;">EXECUTION BLOCKED</div>
+                <div style="font-size:13.5px;color:#8c463e;line-height:1.5;">Your account is suspended — you cannot start or complete this mission until it is reinstated.</div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- awarded to someone else -->
+          <sc-if value="{{ awardedToOther }}">
+            <div style="text-align:center;padding:18px 12px;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:8px;">CLOSED</div>
+              <div style="font-size:14px;color:#5c6b7a;">This job was awarded to {{ activeVm.awardedTo }}.</div>
+            </div>
+          </sc-if>
+
+          <!-- blocked by suspension -->
+          <sc-if value="{{ bidBlocked }}">
+            <div style="background:#fdf3f2;border:1px solid #f0d5d3;border-radius:10px;padding:15px 16px;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#c0574d;margin-bottom:6px;">BIDDING UNAVAILABLE</div>
+              <div style="font-size:13.5px;color:#8c463e;line-height:1.5;">{{ bidBlockedMsg }}</div>
+            </div>
+          </sc-if>
+
+          <!-- bidding open -->
+          <sc-if value="{{ canBid }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ hasMyBid }}">
+              <div style="background:#e5f6ee;border:1px solid #bfe8d5;border-radius:10px;padding:13px 15px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:13px;color:#0f8c5c;">Your current bid</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;color:#0f8c5c;">{{ myBidPrice }}</span>
+              </div>
+            </sc-if>
+            <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b7c8d;margin-bottom:8px;">{{ bidLabel }}</label>
+            <div style="position:relative;margin-bottom:12px;">
+              <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#6b7c8d;font-family:'IBM Plex Mono',monospace;font-size:16px;">$</span>
+              <input value="{{ bidDraft }}" onInput="{{ onBid }}" type="number" min="0" placeholder="0" style="width:100%;background:#f7f9fb;border:1px solid #dbe2ea;border-radius:9px;color:#1b2732;font-family:'IBM Plex Mono',monospace;font-size:18px;padding:12px 12px 12px 30px;outline:none;" style-focus="border-color:#12a06a;background:#fff;">
+            </div>
+            <button onClick="{{ placeBid }}" style="width:100%;background:#12a06a;border:none;color:#fff;font-size:14px;font-weight:600;padding:12px;border-radius:9px;cursor:pointer;box-shadow:0 3px 12px rgba(18,160,106,.24);" style-hover="background:#0f8c5c;">{{ bidButtonLabel }}</button>
+            <div style="text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#a2afbc;margin-top:12px;">{{ activeVm.deadline }}</div>
+          </sc-if>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ============ ADMIN — OVERVIEW ============ -->
+  <sc-if value="{{ isAdminOverview }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1200px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="margin-bottom:26px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#6d5ef0;margin-bottom:8px;">PLATFORM ADMIN</div>
+        <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">Platform Overview</h1>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;">
+        <sc-for list="{{ adminStats }}" as="s" hint-placeholder-count="6">
+          <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:15px 16px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+            <div style="font-size:23px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ s.color }};line-height:1.1;">{{ s.value }}</div>
+            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:#93a1b0;margin-top:7px;">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:18px;">MISSIONS BY STATUS</div>
+          <div style="display:flex;flex-direction:column;gap:11px;">
+            <sc-for list="{{ statusBars }}" as="b" hint-placeholder-count="7">
+              <div style="display:grid;grid-template-columns:92px 1fr 28px;gap:12px;align-items:center;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#5c6b7a;">{{ b.label }}</span>
+                <div style="height:9px;background:#f2f5f8;border-radius:5px;overflow:hidden;"><div style="{{ b.barStyle }}"></div></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:#1b2732;text-align:right;">{{ b.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(20,35,55,.04);display:flex;flex-direction:column;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:18px;">BIDS PER MISSION</div>
+          <sc-if value="{{ bidBarsEmpty }}"><div style="flex:1;display:flex;align-items:center;justify-content:center;color:#93a1b0;font-size:13px;">No bids yet</div></sc-if>
+          <div style="flex:1;display:flex;align-items:flex-end;gap:12px;min-height:150px;">
+            <sc-for list="{{ bidBars }}" as="b" hint-placeholder-count="5">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#2f6bff;">{{ b.n }}</span>
+                <div style="width:100%;flex:1;display:flex;align-items:flex-end;"><div style="{{ b.colStyle }}"></div></div>
+                <span style="font-size:9.5px;color:#93a1b0;text-align:center;line-height:1.25;height:24px;overflow:hidden;">{{ b.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:20px;margin-top:16px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#a2afbc;margin-bottom:16px;">USER BASE</div>
+        <div style="display:flex;flex-direction:column;gap:13px;">
+          <sc-for list="{{ roleSplit }}" as="r" hint-placeholder-count="2">
+            <div style="display:grid;grid-template-columns:96px 1fr 28px;gap:12px;align-items:center;">
+              <span style="font-size:12.5px;color:#43525f;">{{ r.label }}</span>
+              <div style="height:8px;background:#f2f5f8;border-radius:4px;overflow:hidden;"><div style="{{ r.barStyle }}"></div></div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:#1b2732;text-align:right;">{{ r.n }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ============ ADMIN — MISSIONS ============ -->
+  <sc-if value="{{ isAdminMissions }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1200px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:22px;">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#6d5ef0;margin-bottom:8px;">PLATFORM ADMIN</div>
+          <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">All Missions</h1>
+        </div>
+        <input value="{{ adminSearch }}" onInput="{{ onAdminSearch }}" placeholder="Search by mission or designer…" style="width:290px;background:#ffffff;border:1px solid #dbe2ea;border-radius:9px;color:#1b2732;font-size:13.5px;padding:10px 12px;outline:none;" style-focus="border-color:#6d5ef0;">
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <div style="display:grid;grid-template-columns:1fr 150px 108px 74px 190px;gap:14px;padding:12px 18px;border-bottom:1px solid #e8edf2;background:#f7f9fb;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#93a1b0;">
+          <span>Mission</span><span>Designer</span><span>Status</span><span style="text-align:right;">Bids</span><span style="text-align:right;">Moderation</span>
+        </div>
+        <sc-if value="{{ adminMissionsEmpty }}"><div style="padding:44px 20px;text-align:center;color:#93a1b0;font-size:13.5px;">No missions match your search.</div></sc-if>
+        <sc-for list="{{ adminMissions }}" as="m" hint-placeholder-count="7">
+          <div style="{{ m.rowStyle }}">
+            <div style="min-width:0;">
+              <div style="font-size:13.5px;font-weight:600;color:#1b2732;line-height:1.35;">{{ m.title }}</div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#93a1b0;">{{ m.location }} · {{ m.dates }}</span>
+                <span style="{{ m.stateStyle }}">{{ m.stateNote }}</span>
+              </div>
+            </div>
+            <div style="font-size:12.5px;color:#43525f;min-width:0;">
+              {{ m.designer }}
+              <sc-if value="{{ m.designerFlag }}"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#e04a3f;margin-top:3px;">Suspended</div></sc-if>
+            </div>
+            <div><span style="{{ m.badgeStyle }}">{{ m.statusLabel }}</span></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b2732;text-align:right;">{{ m.bidCount }}</div>
+            <div style="display:flex;gap:7px;justify-content:flex-end;">
+              <button onClick="{{ m.toggleHide }}" style="background:#fff;border:1px solid #f2e0c4;color:#a8720b;font-size:12px;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#fdf8ef;border-color:#e6c98f;">{{ m.hideLabel }}</button>
+              <button onClick="{{ m.toggleRemove }}" style="background:#fff;border:1px solid #f0d5d3;color:#c0574d;font-size:12px;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer;" style-hover="background:#fdf3f2;border-color:#e5b0ab;">{{ m.removeLabel }}</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:12px;color:#93a1b0;margin-top:12px;line-height:1.5;">Hidden missions stay with their designer but disappear from the pilot feed. Removed missions are withdrawn from the platform entirely — both are reversible.</div>
+    </main>
+  </sc-if>
+
+  <!-- ============ ADMIN — USERS ============ -->
+  <sc-if value="{{ isAdminUsers }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1200px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="margin-bottom:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#6d5ef0;margin-bottom:8px;">PLATFORM ADMIN</div>
+        <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">Users</h1>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <div style="display:grid;grid-template-columns:1fr 160px 190px 120px 116px;gap:14px;padding:12px 18px;border-bottom:1px solid #e8edf2;background:#f7f9fb;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#93a1b0;">
+          <span>User</span><span>Role</span><span>Activity</span><span>Status</span><span style="text-align:right;">Action</span>
+        </div>
+        <sc-for list="{{ adminUsers }}" as="u" hint-placeholder-count="8">
+          <div style="{{ u.rowStyle }}">
+            <div style="min-width:0;">
+              <div style="font-size:13.5px;font-weight:600;color:#1b2732;">{{ u.name }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#93a1b0;margin-top:3px;">{{ u.licence }} · joined {{ u.joined }}</div>
+            </div>
+            <div><span style="{{ u.roleStyle }}">{{ u.role }}</span></div>
+            <div style="font-size:12.5px;color:#43525f;">{{ u.activity }}</div>
+            <div><span style="{{ u.statusStyle }}"><span style="{{ u.statusDot }}"></span>{{ u.statusLabel }}</span></div>
+            <div><button onClick="{{ u.toggle }}" style="{{ u.btnStyle }}">{{ u.btnLabel }}</button></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:12px;color:#93a1b0;margin-top:12px;line-height:1.5;">Suspending a designer blocks new missions and freezes bidding on their existing ones. Suspending a pilot blocks bidding, awards, and execution of jobs already awarded to them.</div>
+    </main>
+  </sc-if>
+
+  <!-- ============ ADMIN — AUDIT ============ -->
+  <sc-if value="{{ isAdminAudit }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:900px;margin:0 auto;padding:32px 24px 72px;animation:fadeup .25s ease;">
+      <div style="margin-bottom:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#6d5ef0;margin-bottom:8px;">PLATFORM ADMIN</div>
+        <h1 style="font-size:30px;font-weight:700;margin:0;letter-spacing:-0.01em;color:#141e28;">Audit Log</h1>
+        <p style="font-size:13.5px;color:#5c6b7a;margin:8px 0 0;">Every designer, pilot, and admin action on the platform, newest first.</p>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e8edf2;border-radius:12px;padding:6px 20px;box-shadow:0 1px 2px rgba(20,35,55,.04);">
+        <sc-if value="{{ auditEmpty }}"><div style="padding:44px 20px;text-align:center;color:#93a1b0;font-size:13.5px;">No activity recorded yet.</div></sc-if>
+        <sc-for list="{{ auditRows }}" as="a" hint-placeholder-count="10">
+          <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #f2f5f8;">
+            <div style="{{ a.dotStyle }}"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+                <span style="font-size:13.5px;font-weight:600;color:#1b2732;white-space:nowrap;">{{ a.actor }}</span>
+                <span style="{{ a.roleStyle }}">{{ a.roleLabel }}</span>
+                <span style="font-size:13.5px;color:#43525f;">{{ a.action }}</span>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#93a1b0;margin-top:4px;">{{ a.target }} · {{ a.when }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{ confirm }}">
+    <div style="position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(20,30,40,.42);animation:fadeup .16s ease;">
+      <div style="width:100%;max-width:436px;background:#ffffff;border:1px solid #e2e8ef;border-radius:14px;padding:24px;box-shadow:0 24px 70px rgba(20,35,55,.28);">
+        <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
+          <div style="{{ confirmIconStyle }}">!</div>
+          <div style="padding-top:3px;">
+            <div style="font-size:17px;font-weight:700;color:#141e28;letter-spacing:-0.01em;">{{ confirmTitle }}</div>
+          </div>
+        </div>
+        <p style="font-size:13.5px;color:#5c6b7a;line-height:1.6;margin:0 0 22px;text-wrap:pretty;">{{ confirmBody }}</p>
+        <div style="display:flex;gap:10px;">
+          <button onClick="{{ confirmNo }}" style="flex:1;background:#f2f5f8;border:1px solid #dbe2ea;color:#43525f;font-size:13.5px;font-weight:600;padding:11px;border-radius:9px;cursor:pointer;" style-hover="border-color:#c3ccd6;background:#eaeff4;">No, keep it</button>
+          <button onClick="{{ confirmYes }}" style="{{ confirmYesStyle }}">{{ confirmLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}">
+    <div style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:11px;background:#ffffff;border:1px solid #e2e8ef;border-left:3px solid {{ toastColor }};border-radius:10px;padding:12px 18px;box-shadow:0 12px 40px rgba(20,35,55,.18);animation:toastin .22s ease;">
+      <span style="width:8px;height:8px;border-radius:50%;background:{{ toastColor }};"></span>
+      <span style="font-size:13.5px;color:#1b2732;">{{ toastMsg }}</span>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;startRole&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ask&quot;,&quot;designer&quot;,&quot;pilot&quot;,&quot;admin&quot;],&quot;default&quot;:&quot;ask&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;animatePath&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Map&quot;},&quot;pathWeight&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:3,&quot;min&quot;:1,&quot;max&quot;:5,&quot;step&quot;:0.5,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Map&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.DAY = 86400000;
+    this.NOW = Date.parse('2026-07-09T12:00:00');
+    this.KEY = 'dronemissions_v1';
+    this.KEYU = 'dronemissions_users_v1';
+    this.KEYA = 'dronemissions_audit_v1';
+    this.ADMIN = 'Nina Vasić';
+    this._seq = 0; this._idc = 0;
+    this.STATUS = {
+      draft:{label:'Draft',color:'#64748b'},
+      published:{label:'Published',color:'#0e9bb5'},
+      bidding:{label:'Bidding',color:'#d9860a'},
+      awarded:{label:'Awarded',color:'#7c5cff'},
+      in_progress:{label:'In Progress',color:'#2f6bff'},
+      completed:{label:'Completed',color:'#12a06a'},
+      cancelled:{label:'Cancelled',color:'#e04a3f'}
+    };
+    this.DESIGNER = 'Maya Reyes';
+    this.PILOT = 'Kai Nakamura';
+    this.EX = {x0:-700, y0:-448, x1:1700, y1:1088};
+    this.MINW = 340; this.MAXW = 2400;
+    this.ZONE = '#6d5ef0';
+    const sr = this.props.startRole;
+    let session = null, screen = 'landing';
+    if (sr === 'designer'){ session = {role:'designer', name:this.DESIGNER}; screen='dashboard'; }
+    else if (sr === 'pilot'){ session = {role:'pilot', name:this.PILOT}; screen='feed'; }
+    else if (sr === 'admin'){ session = {role:'admin', name:this.ADMIN}; screen='admin-overview'; }
+    this.state = { session, screen, missions:this.load(), users:this.loadUsers(), audit:this.loadAudit(), activeId:null, pilotTab:'open', search:'', adminSearch:'', editor:null, bidDraft:'', toast:null, confirm:null };
+  }
+
+  /* ---------- persistence ---------- */
+  load(){ try { const raw = localStorage.getItem(this.KEY); if (raw){ const d = JSON.parse(raw); if (Array.isArray(d) && d.length){ d.forEach(m=>{ if(!m.geofence) m.geofence=this.encCircle(m.waypoints,70); }); return d; } } } catch(e){} return this.seed(); }
+  save(m){ try { localStorage.setItem(this.KEY, JSON.stringify(m)); } catch(e){} }
+  loadUsers(){ try { const raw=localStorage.getItem(this.KEYU); if(raw){ const d=JSON.parse(raw); if(Array.isArray(d)&&d.length) return d; } } catch(e){} return this.seedUsers(); }
+  saveUsers(u){ try { localStorage.setItem(this.KEYU, JSON.stringify(u)); } catch(e){} }
+  loadAudit(){ try { const raw=localStorage.getItem(this.KEYA); if(raw){ const d=JSON.parse(raw); if(Array.isArray(d)&&d.length) return d; } } catch(e){} return this.seedAudit(); }
+  saveAudit(a){ try { localStorage.setItem(this.KEYA, JSON.stringify(a)); } catch(e){} }
+
+  seedUsers(){
+    const N=this.NOW, D=this.DAY;
+    return [
+      {name:this.DESIGNER, role:'designer', suspended:false, joined:N-210*D, licence:'—'},
+      {name:'Leo Park', role:'designer', suspended:false, joined:N-160*D, licence:'—'},
+      {name:this.PILOT, role:'pilot', suspended:false, joined:N-190*D, licence:'FAA 107-48213'},
+      {name:'Priya Anand', role:'pilot', suspended:false, joined:N-150*D, licence:'FAA 107-51902'},
+      {name:'Sasha Volkov', role:'pilot', suspended:false, joined:N-120*D, licence:'FAA 107-44771'},
+      {name:'Dmitri Orlov', role:'pilot', suspended:false, joined:N-95*D, licence:'FAA 107-39560'},
+      {name:'Marco Ruiz', role:'pilot', suspended:false, joined:N-240*D, licence:'FAA 107-28114'},
+      {name:'Elena Sokol', role:'pilot', suspended:true, joined:N-260*D, licence:'FAA 107-30288'}
+    ];
+  }
+  seedAudit(){
+    const N=this.NOW, D=this.DAY; let i=0;
+    const e=(actor,role,action,target,days)=>({id:'A'+(++i), at:N-days*D, actor, role, action, target});
+    return [
+      e('Elena Sokol','pilot','Marked mission Completed','Film B-Roll — Downtown Rooftops',18),
+      e(this.ADMIN,'admin','Suspended pilot','Elena Sokol',16),
+      e(this.ADMIN,'admin','Reactivated pilot','Marco Ruiz',22),
+      e('Marco Ruiz','pilot','Placed a bid of $680','Vineyard Health Mapping — Napa Block 7',10),
+      e(this.DESIGNER,'designer','Awarded mission to Marco Ruiz','Vineyard Health Mapping — Napa Block 7',9),
+      e('Leo Park','designer','Awarded mission to '+this.PILOT,'Bridge Deck Inspection — Carquinez Strait',12),
+      e('Priya Anand','pilot','Placed a bid of $475','Coastal Erosion Survey — Half Moon Bay',3),
+      e('Sasha Volkov','pilot','Placed a bid of $520','Coastal Erosion Survey — Half Moon Bay',2),
+      e('Dmitri Orlov','pilot','Placed a bid of $390','Construction Progress Capture — Mission Bay Ph.2',2),
+      e(this.PILOT,'pilot','Placed a bid of $440','Coastal Erosion Survey — Half Moon Bay',1),
+      e(this.PILOT,'pilot','Placed a bid of $410','Construction Progress Capture — Mission Bay Ph.2',1),
+      e(this.DESIGNER,'designer','Published mission','Rooftop Solar Array Inspection — Fremont Depot',1)
+    ].sort((a,b)=>b.at-a.at);
+  }
+
+  /* ---------- audit + moderation ---------- */
+  log(action,target){
+    const me=this.state.session; if(!me) return;
+    this.setState(s=>{ const audit=[{id:'A'+Date.now()+'-'+Math.round(Math.random()*999), at:Date.now(), actor:me.name, role:me.role, action, target}, ...s.audit].slice(0,300); this.saveAudit(audit); return {audit}; });
+  }
+  userOf(name){ return this.state.users.find(u=>u.name===name); }
+  isSuspended(name){ const u=this.userOf(name); return !!(u&&u.suspended); }
+  toggleSuspend(name){
+    const u=this.userOf(name); if(!u) return; const next=!u.suspended;
+    if(next){
+      const isPilot = u.role==='pilot';
+      this.setState({confirm:{
+        title:'Suspend '+name+'?',
+        body: isPilot
+          ? 'This pilot will immediately be unable to place bids, be awarded missions, or execute jobs already awarded to them. Existing bids are kept.'
+          : 'This designer will immediately be unable to create, edit, or publish missions, and their published missions will stop accepting bids.',
+        confirmLabel:'Suspend '+u.role, tone:'danger',
+        onYes:()=>this.applySuspend(name,true)
+      }});
+      return;
+    }
+    this.applySuspend(name,false);
+  }
+  applySuspend(name,next){
+    const u=this.userOf(name); if(!u) return;
+    this.setState(s=>{ const users=s.users.map(x=>x.name===name?{...x,suspended:next}:x); this.saveUsers(users); return {users, confirm:null}; });
+    this.log((next?'Suspended ':'Reactivated ')+u.role, name);
+    this.toast(name+(next?' suspended':' reactivated'), next?'#e04a3f':'#12a06a');
+  }
+  setMissionFlag(id,flag,val,label){
+    const m0=this.state.missions.find(x=>x.id===id);
+    if(val && flag==='removed'){
+      const nb=(m0&&(m0.bids||[]).length)||0;
+      this.setState({confirm:{
+        title:'Remove this mission?',
+        body:'“'+(m0?m0.title:'')+'” will be withdrawn from the platform for everyone, including its designer'+(nb?', along with its '+nb+' bid'+(nb===1?'':'s'):'')+'. You can restore it later from this list.',
+        confirmLabel:'Remove mission', tone:'danger',
+        onYes:()=>this.applyMissionFlag(id,flag,val,label)
+      }});
+      return;
+    }
+    if(val && flag==='hidden'){
+      this.setState({confirm:{
+        title:'Hide this mission?',
+        body:'“'+(m0?m0.title:'')+'” will disappear from the pilot feed and stop receiving new bids. Its designer keeps it and can still see it.',
+        confirmLabel:'Hide mission', tone:'warn',
+        onYes:()=>this.applyMissionFlag(id,flag,val,label)
+      }});
+      return;
+    }
+    this.applyMissionFlag(id,flag,val,label);
+  }
+  applyMissionFlag(id,flag,val,label){
+    let title='';
+    this.mutate(missions=>{ const m=missions.find(x=>x.id===id); if(m){ m[flag]=val; title=m.title; } });
+    this.setState({confirm:null});
+    this.log(label, title);
+    this.toast(label+' — '+title.slice(0,34), flag==='removed'?'#e04a3f':'#d9860a');
+  }
+  genId(){ return 'M' + this.NOW.toString(36) + '-' + (++this._idc); }
+
+  seed(){
+    const N = this.NOW, D = this.DAY;
+    const W = a => a.map(p => ({x:p[0], y:p[1]}));
+    let s = 0; const bid = (pilot, price, days, status) => ({id:'B'+(++s), pilot, price, at:N-days*D, status:status||'pending'});
+    const ms = [
+      {id:'M2', title:'Rooftop Solar Array Inspection — Fremont Depot', location:'Fremont, CA', description:'Thermal + RGB inspection of a 4.2 MW rooftop array. Grid-pattern scan at 40 m AGL with 80% overlap for orthomosaic stitching. Flag any hot cells for the O&M team.', designer:this.DESIGNER, startDate:'2026-07-18', endDate:'2026-07-18', biddingDeadline:'2026-07-14', waypoints:W([[300,180],[700,180],[700,300],[300,300],[300,420],[700,420]]), bids:[], status:'published', awardedTo:null, created:N-1*D},
+      {id:'M7', title:'Construction Progress Capture — Mission Bay Ph.2', location:'San Francisco, CA', description:'Bi-weekly aerial progress documentation of a mixed-use build. Fixed orbit plus a nadir grid pass for BIM overlay. Deliver stitched ortho + 12 hero stills.', designer:'Leo Park', startDate:'2026-07-19', endDate:'2026-07-21', biddingDeadline:'2026-07-16', waypoints:W([[280,200],[620,190],[700,360],[420,470],[240,360]]), bids:[bid('Dmitri Orlov',390,2), bid(this.PILOT,410,1)], status:'bidding', awardedTo:null, created:N-4*D},
+      {id:'M1', title:'Coastal Erosion Survey — Half Moon Bay', location:'Half Moon Bay, CA', description:'Photogrammetric survey of 1.2 km of cliff line for erosion modelling. Requires a low-tide window; maintain a 30 m offshore standoff and consistent 45 m AGL.', designer:this.DESIGNER, startDate:'2026-07-20', endDate:'2026-07-22', biddingDeadline:'2026-07-15', waypoints:W([[120,120],[300,180],[480,150],[640,240],[760,360],[600,460],[380,430],[200,360]]), bids:[bid('Priya Anand',475,3), bid('Sasha Volkov',520,2), bid(this.PILOT,440,1)], status:'bidding', awardedTo:null, created:N-3*D},
+      {id:'M6', title:'Wetland Wildlife Count — Grizzly Island', location:'Suisun Marsh, CA', description:'Automated waterfowl census over a protected wetland. Single perimeter sweep at 100 m to minimise disturbance. Coordinate with the reserve warden before launch.', designer:this.DESIGNER, startDate:'2026-08-02', endDate:'2026-08-04', biddingDeadline:'2026-07-26', waypoints:W([[200,160],[760,180],[800,460],[240,470],[200,160]]), bids:[], status:'draft', awardedTo:null, created:N-5*D},
+      {id:'M3', title:'Vineyard Health Mapping — Napa Block 7', location:'Napa Valley, CA', description:'Multispectral NDVI mapping across 18 rows for irrigation planning. Hold a consistent 25 m AGL on the cross-hatch pattern for clean stitching.', designer:this.DESIGNER, startDate:'2026-07-12', endDate:'2026-07-13', biddingDeadline:'2026-07-08', waypoints:W([[200,140],[800,160],[800,240],[200,260],[200,340],[800,360],[800,440],[200,460]]), bids:[bid('Marco Ruiz',680,10,'accepted'), bid('Elena Sokol',720,11,'declined'), bid(this.PILOT,700,10,'declined')], status:'awarded', awardedTo:'Marco Ruiz', created:N-9*D},
+      {id:'M4', title:'Bridge Deck Inspection — Carquinez Strait', location:'Vallejo, CA', description:'Close-range deck and truss inspection for a corrosion review. Linear pass along the span at 15 m standoff; manual-override zones are flagged at the towers.', designer:'Leo Park', startDate:'2026-07-16', endDate:'2026-07-17', biddingDeadline:'2026-07-10', waypoints:W([[140,340],[320,320],[500,330],[680,320],[860,340]]), bids:[bid(this.PILOT,560,12,'accepted'), bid('Dmitri Orlov',610,13,'declined')], status:'awarded', awardedTo:this.PILOT, created:N-11*D},
+      {id:'M5', title:'Film B-Roll — Downtown Rooftops', location:'Oakland, CA', description:'Cinematic reveal orbits over the skyline for a documentary open. Golden-hour window, 6K, ND filters. Two takes per orbit minimum.', designer:this.DESIGNER, startDate:'2026-06-28', endDate:'2026-06-28', biddingDeadline:'2026-06-20', waypoints:W([[500,150],[680,240],[700,420],[520,500],[330,430],[300,250],[500,150]]), bids:[bid('Elena Sokol',900,20,'accepted')], status:'completed', awardedTo:'Elena Sokol', created:N-20*D}
+    ];
+    ms.forEach(m=>{ m.geofence = this.encCircle(m.waypoints, 70); });
+    return ms;
+  }
+
+  /* ---------- formatting ---------- */
+  fmtDate(iso){ if(!iso) return '—'; const d = new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+  fmtRange(a,b){ if(!a && !b) return 'TBD'; if(a===b) return this.fmtDate(a); return this.fmtDate(a)+' – '+this.fmtDate(b); }
+  daysUntil(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00').getTime()-this.NOW)/this.DAY); }
+  deadlineText(iso){ const n = this.daysUntil(iso); if(n===null) return 'No deadline'; if(n<0) return 'Bidding closed'; if(n===0) return 'Bids close today'; if(n===1) return 'Bids close in 1 day'; return 'Bids close in '+n+' days'; }
+  fmtWhen(at){ const d = Math.round((this.NOW-at)/this.DAY); if(d<=0) return 'today'; if(d===1) return '1 day ago'; return d+' days ago'; }
+  pathMeters(wps){ let d=0; for(let i=1;i<wps.length;i++){ const dx=wps[i].x-wps[i-1].x, dy=wps[i].y-wps[i-1].y; d+=Math.sqrt(dx*dx+dy*dy); } return d*1.5; }
+  distanceText(wps){ return (this.pathMeters(wps)/1000).toFixed(2)+' km'; }
+  durationText(wps){ const m = Math.max(0, Math.round(this.pathMeters(wps)/9/60)); return m+' min'; }
+  hexA(hex,a){ const n=parseInt(hex.slice(1),16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
+  rngFrom(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=(h<<13)|(h>>>19); } let a=h>>>0; return function(){ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+  /* ---------- geofence geometry ---------- */
+  encCircle(wps,pad){ if(!wps||!wps.length) return {type:'circle',cx:500,cy:320,r:300}; let sx=0,sy=0; wps.forEach(p=>{sx+=p.x;sy+=p.y;}); const cx=sx/wps.length, cy=sy/wps.length; let r=0; wps.forEach(p=>{ r=Math.max(r,Math.hypot(p.x-cx,p.y-cy)); }); return {type:'circle',cx:Math.round(cx),cy:Math.round(cy),r:Math.round(r+pad)}; }
+  inZone(p,z){ if(!z) return true; if(z.type==='circle') return Math.hypot(p.x-z.cx,p.y-z.cy)<=z.r+0.5; return this.pointInPoly(p,z.pts); }
+  pointInPoly(p,pts){ let inside=false; for(let i=0,j=pts.length-1;i<pts.length;j=i++){ const xi=pts[i].x,yi=pts[i].y,xj=pts[j].x,yj=pts[j].y; if(((yi>p.y)!==(yj>p.y)) && (p.x < (xj-xi)*(p.y-yi)/((yj-yi)||1e-9)+xi)) inside=!inside; } return inside; }
+  clampToZone(p,z){ if(!z) return p; if(z.type==='circle'){ const dx=p.x-z.cx,dy=p.y-z.cy,d=Math.hypot(dx,dy); if(d<=z.r) return p; const k=z.r/(d||1); return {x:Math.round(z.cx+dx*k),y:Math.round(z.cy+dy*k)}; } return this.pointInPoly(p,z.pts)?p:null; }
+  zoneCentroid(z){ if(z.type==='circle') return {x:z.cx,y:z.cy}; let sx=0,sy=0; z.pts.forEach(p=>{sx+=p.x;sy+=p.y;}); return {x:sx/z.pts.length,y:sy/z.pts.length}; }
+  setGeofence(z){ this.setEditor({geofence:z}); }
+  zoneToCircle(){ const ed=this.state.editor; if(!ed) return; const z=ed.geofence; if(z&&z.type==='circle') return; if(z&&z.type==='polygon'){ const c=this.encCircle(z.pts,0); this.setGeofence({type:'circle',cx:c.cx,cy:c.cy,r:Math.max(80,c.r)}); } else this.setGeofence({type:'circle',cx:500,cy:320,r:300}); }
+  zoneToPolygon(){ const ed=this.state.editor; if(!ed) return; const z=ed.geofence; if(z&&z.type==='polygon') return; const c=(z&&z.type==='circle')?z:{cx:500,cy:320,r:300}; const pts=[]; for(let k=0;k<6;k++){ const a=-Math.PI/2+k*Math.PI/3; pts.push({x:Math.round(c.cx+Math.cos(a)*c.r), y:Math.round(c.cy+Math.sin(a)*c.r)}); } this.setGeofence({type:'polygon',pts}); }
+  flashFence(){ this.setEditor({fenceWarn:true}); clearTimeout(this._fw); this._fw=setTimeout(()=>{ if(this.state.editor) this.setEditor({fenceWarn:false}); },700); }
+
+  /* ---------- map view (pan / zoom) ---------- */
+  defView(){ return {x:0,y:0,w:1000,h:640}; }
+  clampView(v){ const EX=this.EX, EXW=EX.x1-EX.x0, EXH=EX.y1-EX.y0; let w=Math.min(v.w,EXW), h=w*0.64; if(h>EXH){ h=EXH; w=h/0.64; } let x=v.x, y=v.y; x=(w>=EXW)?EX.x0+(EXW-w)/2:Math.max(EX.x0,Math.min(EX.x1-w,x)); y=(h>=EXH)?EX.y0+(EXH-h)/2:Math.max(EX.y0,Math.min(EX.y1-h,y)); return {x,y,w,h}; }
+  zoomAround(factor,fx,fy){ this.setState(s=>{ if(!s.editor) return {}; const v=s.editor.view||this.defView(); let nw=Math.max(this.MINW,Math.min(this.MAXW,v.w*factor)); let nh=nw*0.64; let nx=fx-(fx-v.x)*(nw/v.w); let ny=fy-(fy-v.y)*(nh/v.h); const nv=this.clampView({x:nx,y:ny,w:nw,h:nh}); return {editor:{...s.editor,view:nv}}; }); }
+  worldCoords(e){ const r=this.svgEl.getBoundingClientRect(); const v=(this.state.editor&&this.state.editor.view)||this.defView(); let x=v.x+(e.clientX-r.left)/r.width*v.w; let y=v.y+(e.clientY-r.top)/r.height*v.h; x=Math.max(this.EX.x0,Math.min(this.EX.x1,x)); y=Math.max(this.EX.y0,Math.min(this.EX.y1,y)); return {x:Math.round(x),y:Math.round(y)}; }
+
+  /* ---------- procedural basemap ---------- */
+  genBasemap(seed, mini){
+    const h=React.createElement; const W=1000,H=640; const els=[];
+    const rng=this.rngFrom(seed);
+    const rand=(a,b)=>a+rng()*(b-a); const pick=a=>a[Math.floor(rng()*a.length)];
+    const C={land:'#eef1ea',water:'#c3dbec',park:'#d7e7c6',roadCase:'#e0e6ec',road:'#ffffff',bldg:'#e6eaef',bldgStroke:'#d9dfe6',label:'#93a3b2',waterLabel:'#6f9dc0'};
+    const EX=this.EX;
+    els.push(h('rect',{key:'land',x:EX.x0,y:EX.y0,width:EX.x1-EX.x0,height:EX.y1-EX.y0,fill:C.land}));
+    const grat=[]; for(let x=Math.ceil(EX.x0/100)*100;x<EX.x1;x+=100) grat.push(h('line',{key:'gx'+x,x1:x,y1:EX.y0,x2:x,y2:EX.y1})); for(let y=Math.ceil(EX.y0/100)*100;y<EX.y1;y+=100) grat.push(h('line',{key:'gy'+y,x1:EX.x0,y1:y,x2:EX.x1,y2:y}));
+    els.push(h('g',{key:'grat',stroke:'rgba(45,75,105,0.045)',strokeWidth:1},grat));
+    // water
+    const layout=pick(['coast','coast','river','lake']); let wlabel=null;
+    if(layout==='coast'){
+      const side=pick(['left','right','top','bottom']); const pts=[];
+      if(side==='right'||side==='left'){
+        const base=side==='right'?rand(650,770):rand(230,350); const dir=side==='right'?1:-1; const edge=side==='right'?W:0;
+        for(let y=-20;y<=H+20;y+=70) pts.push([base+dir*rand(-35,55)+Math.sin(y/90)*28, y]);
+        const poly=[[edge,-20],...pts,[edge,H+20]];
+        els.push(h('polygon',{key:'water',points:poly.map(p=>p[0]+','+p[1]).join(' '),fill:C.water}));
+        wlabel=[side==='right'?base+110:base-110,H*0.5];
+      } else {
+        const base=side==='bottom'?rand(430,520):rand(120,210); const dir=side==='bottom'?1:-1; const edge=side==='bottom'?H:0;
+        for(let x=-20;x<=W+20;x+=90) pts.push([x, base+dir*rand(-28,45)+Math.cos(x/120)*22]);
+        const poly=[[-20,edge],...pts,[W+20,edge]];
+        els.push(h('polygon',{key:'water',points:poly.map(p=>p[0]+','+p[1]).join(' '),fill:C.water}));
+        wlabel=[W*0.5,side==='bottom'?base+70:base-60];
+      }
+    } else if(layout==='river'){
+      const vert=rng()<0.5; const pts=[];
+      if(vert){ const base=rand(360,640); for(let y=-20;y<=H+20;y+=60) pts.push([base+Math.sin(y/70)*70+rand(-14,14),y]); }
+      else { const base=rand(230,420); for(let x=-20;x<=W+20;x+=70) pts.push([x, base+Math.sin(x/90)*55+rand(-14,14)]); }
+      els.push(h('polyline',{key:'river',points:pts.map(p=>p[0]+','+p[1]).join(' '),fill:'none',stroke:C.water,strokeWidth:rand(72,104),strokeLinecap:'round',strokeLinejoin:'round'}));
+      const mid=pts[Math.floor(pts.length/2)]; wlabel=vert?[mid[0]+70,H*0.28]:[W*0.28,mid[1]-46];
+    } else {
+      const cx=rand(320,740),cy=rand(190,450),rx=rand(120,185),ry=rand(90,145); const pts=[];
+      for(let a=0;a<6.2;a+=Math.PI/8){ const rr=1+rand(-0.12,0.12); pts.push([cx+Math.cos(a)*rx*rr, cy+Math.sin(a)*ry*rr]); }
+      els.push(h('polygon',{key:'lake',points:pts.map(p=>p[0]+','+p[1]).join(' '),fill:C.water}));
+      wlabel=[cx,cy];
+    }
+    // parks
+    const parkN=mini?1:(1+Math.floor(rng()*3));
+    for(let i=0;i<parkN;i++){ const cx=rand(130,870),cy=rand(120,520),rx=rand(48,105),ry=rand(40,85); const pts=[];
+      for(let a=0;a<6.2;a+=Math.PI/6){ const rr=1+rand(-0.16,0.16); pts.push([cx+Math.cos(a)*rx*rr, cy+Math.sin(a)*ry*rr]); }
+      els.push(h('polygon',{key:'park'+i,points:pts.map(p=>p[0]+','+p[1]).join(' '),fill:C.park,opacity:0.85}));
+    }
+    // arterial roads
+    const artN=mini?2:(2+Math.floor(rng()*2)); const caseW=mini?5:9, fillW=mini?2.3:5;
+    for(let i=0;i<artN;i++){ const horiz=rng()<0.5; let ps;
+      if(horiz){ const y=rand(90,H-90),y2=y+rand(-160,160); ps=[[EX.x0,y],[W*0.5,(y+y2)/2],[EX.x1,y2]]; }
+      else { const x=rand(90,W-90),x2=x+rand(-160,160); ps=[[x,EX.y0],[(x+x2)/2,H*0.5],[x2,EX.y1]]; }
+      const str=ps.map(p=>p[0]+','+p[1]).join(' ');
+      els.push(h('polyline',{key:'ac'+i,points:str,fill:'none',stroke:C.roadCase,strokeWidth:caseW,strokeLinecap:'round',strokeLinejoin:'round'}));
+      els.push(h('polyline',{key:'af'+i,points:str,fill:'none',stroke:C.road,strokeWidth:fillW,strokeLinecap:'round',strokeLinejoin:'round'}));
+    }
+    // local street grid + buildings
+    const rw=rand(280,410), rh=rand(190,290); const rx0=rand(40,W-rw-40), ry0=rand(40,H-rh-40);
+    const sp=mini?68:rand(56,74); const gridLines=[]; const blds=[];
+    for(let x=rx0;x<=rx0+rw+0.1;x+=sp) gridLines.push(['v',x]);
+    for(let y=ry0;y<=ry0+rh+0.1;y+=sp) gridLines.push(['h',y]);
+    const mkLine=(o,v,extra)=> o==='v'
+      ? h('line',{key:'l'+o+v+extra,x1:v,y1:ry0,x2:v,y2:ry0+rh,...(extra||{})})
+      : h('line',{key:'l'+o+v+extra,x1:rx0,y1:v,x2:rx0+rw,y2:v,...(extra||{})});
+    if(!mini){ for(let x=rx0;x<rx0+rw-sp*0.5;x+=sp){ for(let y=ry0;y<ry0+rh-sp*0.5;y+=sp){ if(rng()<0.55){ const pad=sp*0.17; const bw=sp-pad*2-rng()*sp*0.14; const bh=sp-pad*2-rng()*sp*0.14; blds.push(h('rect',{key:'b'+x+'_'+y,x:x+pad,y:y+pad,width:Math.max(6,bw),height:Math.max(6,bh),fill:C.bldg,stroke:C.bldgStroke,strokeWidth:1,rx:1.5})); } } } }
+    els.push(h('g',{key:'blds'},blds));
+    els.push(h('g',{key:'gc',stroke:C.roadCase,strokeWidth:mini?3.4:5,strokeLinecap:'round'}, gridLines.map(g=>mkLine(g[0],g[1],'a'))));
+    els.push(h('g',{key:'gf',stroke:C.road,strokeWidth:mini?1.5:2.6,strokeLinecap:'round'}, gridLines.map(g=>mkLine(g[0],g[1],'b'))));
+    // labels
+    if(!mini){
+      const names=['NORTH REACH','HARBOR HILL','OLD TOWN','RIDGEWAY','MILL DISTRICT','EASTBANK','CEDAR FLATS','WESTGATE','THE LEVEE','GREENPOINT'];
+      els.push(h('text',{key:'lbl',x:rx0+rw/2,y:ry0+rh/2,textAnchor:'middle',fill:C.label,fontSize:13,letterSpacing:'0.18em',fontFamily:'IBM Plex Mono, monospace'}, pick(names)));
+      const wnames=['BAY','CHANNEL','RIVER','SOUND','ESTUARY'];
+      if(wlabel) els.push(h('text',{key:'wlbl',x:wlabel[0],y:wlabel[1],textAnchor:'middle',fill:C.waterLabel,fontSize:12,fontStyle:'italic',letterSpacing:'0.12em',fontFamily:'Space Grotesk, sans-serif'}, pick(wnames)));
+    }
+    return els;
+  }
+
+  /* ---------- map rendering ---------- */
+  buildMap(waypoints, opts){
+    opts = opts || {}; const h = React.createElement; const W=1000, H=640; const els=[];
+    const anim = this.props.animatePath !== false;
+    const seed = opts.seed || 'seed';
+    const ed = this.state.editor;
+    const view = opts.view || this.defView();
+    const hs = view.w/1000;                       // world-units per screen-unit factor
+    const wt = (this.props.pathWeight != null ? this.props.pathWeight : 3) * hs;
+    const zone = opts.geofence;
+    els.push(h('g',{key:'base'}, this.genBasemap(seed, !!opts.mini)));
+    els.push(h('rect',{key:'frame',x:1,y:1,width:W-2,height:H-2,fill:'none',stroke:'#d0d8e0',strokeWidth:1.5}));
+    if(!opts.mini){
+      els.push(h('circle',{key:'nfz',cx:168,cy:520,r:58,fill:'rgba(224,74,63,0.05)',stroke:'rgba(224,74,63,0.45)',strokeWidth:1.2,strokeDasharray:'5 5'}));
+      els.push(h('text',{key:'nfzt',x:168,y:524,textAnchor:'middle',fill:'rgba(196,58,49,0.75)',fontSize:10,letterSpacing:'0.1em',fontFamily:'IBM Plex Mono, monospace'},'RESTRICTED'));
+      els.push(h('g',{key:'compass',transform:'translate('+(view.x+view.w-58)+','+(view.y+58)+') scale('+hs+')'},[
+        h('circle',{key:'c',r:20,fill:'rgba(255,255,255,0.88)',stroke:'#cfd8e0'}),
+        h('path',{key:'n',d:'M0,-14 L5,4 L0,-1 L-5,4 Z',fill:'#2f6bff'}),
+        h('text',{key:'t',x:0,y:-23,textAnchor:'middle',fill:'#5c6b7a',fontSize:10,fontFamily:'IBM Plex Mono, monospace'},'N')
+      ]));
+      els.push(h('g',{key:'scale',transform:'translate('+(view.x+40*hs)+','+(view.y+view.h-34*hs)+') scale('+hs+')'},[
+        h('line',{key:'l',x1:0,y1:0,x2:100,y2:0,stroke:'#6b7c8d',strokeWidth:2}),
+        h('line',{key:'l0',x1:0,y1:-4,x2:0,y2:4,stroke:'#6b7c8d',strokeWidth:2}),
+        h('line',{key:'l1',x1:100,y1:-4,x2:100,y2:4,stroke:'#6b7c8d',strokeWidth:2}),
+        h('text',{key:'t',x:50,y:-7,textAnchor:'middle',fill:'#6b7c8d',fontSize:10,fontFamily:'IBM Plex Mono, monospace'},'150 m')
+      ]));
+    }
+    // geofence overlay
+    if(zone){
+      const warn = opts.editable && ed && ed.fenceWarn;
+      const zc = warn ? '#e04a3f' : this.ZONE;
+      const zf = warn ? 'rgba(224,74,63,0.10)' : 'rgba(109,94,240,0.08)';
+      const dash = (9*hs)+' '+(7*hs);
+      const showHandles = opts.editable && ed && ed.mode==='select';
+      if(zone.type==='circle'){
+        els.push(h('circle',{key:'zone',cx:zone.cx,cy:zone.cy,r:zone.r,fill:zf,stroke:zc,strokeWidth:1.7*hs,strokeDasharray:dash}));
+        if(!opts.mini) els.push(h('text',{key:'zlbl',x:zone.cx,y:zone.cy-zone.r+18*hs,textAnchor:'middle',fill:zc,fontSize:11*hs,letterSpacing:'0.12em',fontFamily:'IBM Plex Mono, monospace',opacity:0.9,style:{pointerEvents:'none'}},'FLIGHT ZONE'));
+        if(showHandles){
+          els.push(h('circle',{key:'zhc',cx:zone.cx,cy:zone.cy,r:6*hs,fill:'#fff',stroke:zc,strokeWidth:2*hs,style:{cursor:'move'},onPointerDown:(e)=>this.onZoneDown('zone-center',0,e)}));
+          els.push(h('circle',{key:'zhr',cx:zone.cx+zone.r,cy:zone.cy,r:6*hs,fill:zc,stroke:'#fff',strokeWidth:2*hs,style:{cursor:'ew-resize'},onPointerDown:(e)=>this.onZoneDown('zone-radius',0,e)}));
+        }
+      } else {
+        const pstr = zone.pts.map(p=>p.x+','+p.y).join(' ');
+        els.push(h('polygon',{key:'zone',points:pstr,fill:zf,stroke:zc,strokeWidth:1.7*hs,strokeDasharray:dash,strokeLinejoin:'round'}));
+        const c=this.zoneCentroid(zone);
+        if(!opts.mini) els.push(h('text',{key:'zlbl',x:c.x,y:c.y,textAnchor:'middle',fill:zc,fontSize:11*hs,letterSpacing:'0.12em',fontFamily:'IBM Plex Mono, monospace',opacity:0.9,style:{pointerEvents:'none'}},'FLIGHT ZONE'));
+        if(showHandles){
+          zone.pts.forEach((p,i)=> els.push(h('circle',{key:'zv'+i,cx:p.x,cy:p.y,r:6*hs,fill:'#fff',stroke:zc,strokeWidth:2*hs,style:{cursor:'grab'},onPointerDown:(e)=>this.onZoneDown('zone-vertex',i,e)})));
+          els.push(h('circle',{key:'zhc',cx:c.x,cy:c.y,r:6*hs,fill:zc,stroke:'#fff',strokeWidth:2*hs,style:{cursor:'move'},onPointerDown:(e)=>this.onZoneDown('zone-center',0,e)}));
+        }
+      }
+    }
+    // flight path
+    if(waypoints.length>=2){
+      const pts = waypoints.map(p=>p.x+','+p.y).join(' ');
+      els.push(h('polyline',{key:'glow',points:pts,fill:'none',stroke:'rgba(47,107,255,0.16)',strokeWidth:wt*3.6,strokeLinejoin:'round',strokeLinecap:'round'}));
+      els.push(h('polyline',{key:'under',points:pts,fill:'none',stroke:'#ffffff',strokeWidth:wt+3.5*hs,strokeLinejoin:'round',strokeLinecap:'round',opacity:0.75}));
+      const pp={key:'path',points:pts,fill:'none',stroke:'#2f6bff',strokeWidth:wt,strokeLinejoin:'round',strokeLinecap:'round',strokeDasharray:(10*hs)+' '+(6*hs)};
+      if(anim) pp.style={animation:'dash 2.6s linear infinite'};
+      els.push(h('polyline',pp));
+    }
+    // waypoint nodes
+    waypoints.forEach((p,i)=>{
+      const isStart = i===0; const outside = zone && !this.inZone(p,zone);
+      const col = outside ? '#e04a3f' : (isStart ? '#12a06a' : '#2f6bff');
+      const nr = (opts.mini?7:12)*hs;
+      const children=[ h('circle',{key:'halo',r:nr,fill:'#ffffff',stroke:col,strokeWidth:(opts.mini?2:2.5)*hs,style:{filter:'drop-shadow(0 1px 2px rgba(20,35,55,0.20))'}}) ];
+      if(!opts.mini) children.push(h('text',{key:'n',x:0,y:4*hs,textAnchor:'middle',fill:outside?'#e04a3f':'#22303c',fontSize:11*hs,fontWeight:600,fontFamily:'IBM Plex Mono, monospace',style:{pointerEvents:'none',userSelect:'none'}}, i+1));
+      const gp={key:'wp'+i,transform:'translate('+p.x+','+p.y+')'};
+      if(opts.editable){ gp.style={cursor:'grab'}; gp.onPointerDown=(e)=>this.onNodePointerDown(i,e); }
+      if(opts.editable && ed && ed.selectedIdx===i && ed.mode==='select'){
+        children.push(h('g',{key:'del',transform:'translate('+(17*hs)+','+(-17*hs)+') scale('+hs+')',style:{cursor:'pointer'},onPointerDown:(e)=>{e.stopPropagation();this.removeWaypoint(i);}},[
+          h('circle',{key:'dc',r:9,fill:'#e04a3f',stroke:'#fff',strokeWidth:1.5}),
+          h('path',{key:'dx',d:'M-3,-3 L3,3 M3,-3 L-3,3',stroke:'#fff',strokeWidth:1.7,strokeLinecap:'round'})
+        ]));
+      }
+      els.push(h('g',gp,children));
+    });
+    const svgProps={key:'svg',viewBox:view.x+' '+view.y+' '+view.w+' '+view.h,width:'100%',height:'100%',preserveAspectRatio:'xMidYMid meet',style:{display:'block'}};
+    if(opts.editable){
+      const panning = this.drag && this.drag.kind==='pan';
+      svgProps.ref=(el)=>{ this.svgEl=el; };
+      svgProps.style={display:'block',touchAction:'none',cursor: ed&&ed.mode==='pan'?(panning?'grabbing':'grab'):(ed&&ed.mode==='add'?'crosshair':'default')};
+      svgProps.onPointerDown=(e)=>this.onMapPointerDown(e);
+      svgProps.onPointerMove=(e)=>this.onMapPointerMove(e);
+      svgProps.onPointerUp=()=>this.onMapUp();
+      svgProps.onPointerLeave=()=>this.onMapUp();
+      svgProps.onWheel=(e)=>{ try{e.preventDefault();}catch(_){} const p=this.worldCoords(e); this.zoomAround(e.deltaY>0?1.12:0.9, p.x, p.y); };
+    }
+    return h('svg',svgProps,els);
+  }
+
+  onMapPointerDown(e){
+    const ed = this.state.editor; if(!ed || !this.svgEl) return;
+    const p = this.worldCoords(e);
+    if(ed.mode==='pan'){ this.drag={kind:'pan', sx:e.clientX, sy:e.clientY, view:{...(ed.view||this.defView())}}; this.forceUpdate(); return; }
+    if(ed.mode==='add'){
+      if(!this.inZone(p, ed.geofence)){ this.flashFence(); this.toast('Waypoint must be inside the flight zone','#e04a3f'); return; }
+      this.setState(s=>{ const wp=[...s.editor.waypoints,p]; return {editor:{...s.editor,waypoints:wp,selectedIdx:wp.length-1}}; });
+      return;
+    }
+    if(ed.mode==='select'){ this.setEditor({selectedIdx:-1}); }
+  }
+  onNodePointerDown(idx,e){
+    const ed=this.state.editor; if(!ed || ed.mode!=='select') return;
+    e.stopPropagation(); this.drag={kind:'node',idx}; this.setEditor({selectedIdx:idx});
+  }
+  onZoneDown(kind,idx,e){
+    const ed=this.state.editor; if(!ed || ed.mode!=='select') return;
+    e.stopPropagation(); this.drag={kind, idx, start:this.worldCoords(e), zone:JSON.parse(JSON.stringify(ed.geofence))};
+  }
+  onMapPointerMove(e){
+    if(!this.svgEl) return;
+    const p = this.worldCoords(e);
+    if(this.coordEl) this.coordEl.textContent = String(p.x).padStart(4,'0')+' · '+String(p.y).padStart(4,'0');
+    const d = this.drag; if(!d) return;
+    if(d.kind==='pan'){ const r=this.svgEl.getBoundingClientRect(); const v=d.view; const dx=(e.clientX-d.sx)/r.width*v.w; const dy=(e.clientY-d.sy)/r.height*v.h; this.setEditor({view:this.clampView({x:v.x-dx,y:v.y-dy,w:v.w,h:v.h})}); return; }
+    if(d.kind==='node'){ const cp=this.clampToZone(p, this.state.editor.geofence); if(!cp) return; this.setState(s=>{ const wp=s.editor.waypoints.map((w,i)=>i===d.idx?cp:w); return {editor:{...s.editor,waypoints:wp}}; }); return; }
+    if(d.kind==='zone-center'){ const z=d.zone; if(z.type==='circle'){ this.setGeofence({...z,cx:p.x,cy:p.y}); } else { const dx=p.x-d.start.x, dy=p.y-d.start.y; this.setGeofence({...z,pts:z.pts.map(q=>({x:Math.round(q.x+dx),y:Math.round(q.y+dy)}))}); } return; }
+    if(d.kind==='zone-radius'){ const z=d.zone; this.setGeofence({...z, r:Math.max(70,Math.round(Math.hypot(p.x-z.cx,p.y-z.cy)))}); return; }
+    if(d.kind==='zone-vertex'){ const z=d.zone; this.setGeofence({...z, pts:z.pts.map((q,i)=>i===d.idx?p:q)}); return; }
+  }
+  onMapUp(){ if(this.drag){ this.drag=null; this.forceUpdate(); } }
+  removeWaypoint(idx){ this.setState(s=>{ const wp=s.editor.waypoints.filter((_,i)=>i!==idx); return {editor:{...s.editor,waypoints:wp,selectedIdx:-1}}; }); }
+  setEditor(patch){ this.setState(s=>({editor:{...s.editor,...patch}})); }
+
+  /* ---------- navigation ---------- */
+  pickRole(role){ this.setState({session:{role,name: role==='designer'?this.DESIGNER:this.PILOT}, screen: role==='designer'?'dashboard':'feed', activeId:null, editor:null, search:'', pilotTab:'open'}); }
+  openDetail(id){ this.setState({screen:'detail', activeId:id, bidDraft:''}); }
+  openEditor(id){
+    if(id){ const m=this.state.missions.find(x=>x.id===id);
+      const gf = m.geofence ? JSON.parse(JSON.stringify(m.geofence)) : this.encCircle(m.waypoints,70);
+      this.setState({screen:'editor', editor:{id:m.id, title:m.title, description:m.description, location:m.location, startDate:m.startDate, endDate:m.endDate, biddingDeadline:m.biddingDeadline, waypoints:(m.waypoints||[]).map(p=>({...p})), geofence:gf, view:this.defView(), fenceWarn:false, mode:'add', selectedIdx:-1}});
+    } else {
+      this.setState({screen:'editor', editor:{id:null, title:'', description:'', location:'', startDate:'', endDate:'', biddingDeadline:'', waypoints:[], geofence:{type:'circle',cx:500,cy:320,r:300}, view:this.defView(), fenceWarn:false, mode:'add', selectedIdx:-1}});
+    }
+  }
+
+  /* ---------- mutations ---------- */
+  toast(msg,color){ this.setState({toast:{msg,color:color||'#2f6bff'}}); clearTimeout(this._t); this._t=setTimeout(()=>this.setState({toast:null}),2800); }
+  mutate(fn){ this.setState(s=>{ const missions=s.missions.map(m=>({...m,bids:(m.bids||[]).map(b=>({...b}))})); fn(missions); this.save(missions); return {missions}; }); }
+
+  saveEditor(kind){
+    const ed = this.state.editor; if(!ed) return;
+    if(this.state.session && this.isSuspended(this.state.session.name)){ this.toast('Your account is suspended — you cannot create or edit missions','#e04a3f'); return; }
+    if(kind==='publish'){
+      if(!ed.title.trim()){ this.toast('Add a title before publishing','#e04a3f'); return; }
+      if(ed.waypoints.length<2){ this.toast('Plot at least 2 waypoints to publish','#e04a3f'); return; }
+    }
+    const status = kind==='publish' ? 'published' : 'draft';
+    this.setState(s=>{
+      let missions = s.missions.slice();
+      const ex = missions.find(m=>m.id===ed.id);
+      if(ex){
+        Object.assign(ex, {title:ed.title||'Untitled Mission', description:ed.description, location:ed.location||'—', startDate:ed.startDate, endDate:ed.endDate, biddingDeadline:ed.biddingDeadline, waypoints:ed.waypoints.map(p=>({...p})), geofence:ed.geofence?JSON.parse(JSON.stringify(ed.geofence)):null, status: ex.status==='draft' ? status : ex.status});
+      } else {
+        missions.unshift({id:this.genId(), title:ed.title||'Untitled Mission', description:ed.description, location:ed.location||'—', designer:s.session.name, startDate:ed.startDate, endDate:ed.endDate, biddingDeadline:ed.biddingDeadline, waypoints:ed.waypoints.map(p=>({...p})), geofence:ed.geofence?JSON.parse(JSON.stringify(ed.geofence)):null, bids:[], status, awardedTo:null, created:this.NOW+(++this._seq)});
+      }
+      this.save(missions);
+      return {missions, screen:'dashboard', editor:null};
+    });
+    this.log(kind==='publish'?'Published mission':'Saved mission draft', ed.title||'Untitled Mission');
+    this.toast(kind==='publish'?'Mission published — now collecting bids':'Draft saved', kind==='publish'?'#0e9bb5':'#64748b');
+  }
+
+  awardBid(mId,bId){
+    const m0=this.state.missions.find(x=>x.id===mId); const b0=m0&&(m0.bids||[]).find(b=>b.id===bId);
+    if(b0 && this.isSuspended(b0.pilot)){ this.toast(b0.pilot+' is suspended and cannot be awarded this mission','#e04a3f'); return; }
+    if(this.state.session && this.isSuspended(this.state.session.name)){ this.toast('Your account is suspended — you cannot award missions','#e04a3f'); return; }
+    let name='', title='';
+    this.mutate(missions=>{ const m=missions.find(x=>x.id===mId); title=m.title; m.bids.forEach(b=>{ if(b.id===bId){ b.status='accepted'; name=b.pilot; } else b.status='declined'; }); m.status='awarded'; m.awardedTo=name; });
+    this.log('Awarded mission to '+name, title);
+    this.toast('Awarded to '+name+' — other bids declined','#7c5cff');
+  }
+  placeBid(id){
+    const raw = parseFloat(this.state.bidDraft);
+    if(!raw || raw<=0){ this.toast('Enter a valid bid amount','#e04a3f'); return; }
+    const me=this.state.session;
+    if(me && this.isSuspended(me.name)){ this.toast('Your account is suspended — you cannot place bids','#e04a3f'); return; }
+    const mm=this.state.missions.find(x=>x.id===id);
+    if(mm && this.isSuspended(mm.designer)){ this.toast('This mission’s designer is suspended — it is not accepting bids','#e04a3f'); return; }
+    const price = Math.round(raw); let updated=false;
+    this.mutate(missions=>{ const m=missions.find(x=>x.id===id); const mine=m.bids.find(b=>b.pilot===this.state.session.name); if(mine){ mine.price=price; mine.at=this.NOW; updated=true; } else { m.bids.push({id:this.genId(), pilot:this.state.session.name, price, at:this.NOW, status:'pending'}); } if(m.status==='published') m.status='bidding'; });
+    this.setState({bidDraft:''});
+    this.log('Placed a bid of $'+price, mm?mm.title:'');
+    this.toast((updated?'Bid updated — $':'Bid placed — $')+price,'#12a06a');
+  }
+  setStatus(id,status,msg,color){
+    const me=this.state.session;
+    if(me && me.role!=='admin' && this.isSuspended(me.name)){ this.toast('Your account is suspended — you cannot change mission status','#e04a3f'); return; }
+    let title='';
+    this.mutate(missions=>{ const m=missions.find(x=>x.id===id); m.status=status; title=m.title; });
+    const labels={published:'Published mission',cancelled:'Cancelled mission',in_progress:'Marked mission In Progress',completed:'Marked mission Completed'};
+    this.log(labels[status]||('Set status to '+status), title);
+    this.toast(msg,color);
+  }
+  resetDemo(){
+    const seed=this.seed(), users=this.seedUsers(), audit=this.seedAudit();
+    this.save(seed); this.saveUsers(users); this.saveAudit(audit);
+    this.setState(s=>({missions:seed, users, audit, screen: s.session.role==='designer'?'dashboard':(s.session.role==='pilot'?'feed':'admin-overview'), activeId:null, editor:null, search:'', adminSearch:'', bidDraft:''}));
+    this.toast('Demo data reset','#64748b');
+  }
+
+  /* ---------- view models ---------- */
+  vm(m){
+    const st = this.STATUS[m.status];
+    const bids = m.bids||[]; const wps = m.waypoints||[];
+    return {
+      id:m.id, title:m.title||'Untitled Mission', description:m.description||'No brief provided.', location:m.location||'—', designer:m.designer,
+      status:m.status, statusLabel:st.label, awardedTo:m.awardedTo,
+      badgeStyle:{display:'inline-flex',alignItems:'center',gap:'6px',fontFamily:"'IBM Plex Mono',monospace",fontSize:'10px',fontWeight:600,letterSpacing:'.1em',textTransform:'uppercase',padding:'4px 10px',borderRadius:'20px',background:this.hexA(st.color,0.1),border:'1px solid '+this.hexA(st.color,0.34),color:st.color},
+      dotStyle:{width:'6px',height:'6px',borderRadius:'50%',background:st.color,flexShrink:0},
+      dates:this.fmtRange(m.startDate,m.endDate), deadline:this.deadlineText(m.biddingDeadline),
+      distance:this.distanceText(wps), duration:this.durationText(wps), wpCount:wps.length,
+      bidCount:bids.length, bidCountText: bids.length===1?'1 bid':(bids.length+' bids'),
+      thumb:this.buildMap(wps,{mini:true, seed:m.id}),
+      telemetry:[ {label:'Waypoints',value:wps.length}, {label:'Path length',value:this.distanceText(wps)}, {label:'Est. flight',value:this.durationText(wps)}, {label:'Bids',value:bids.length} ]
+    };
+  }
+
+  buildSteps(m){
+    const order=['draft','published','bidding','awarded','in_progress','completed'];
+    const labels={draft:'Draft',published:'Published',bidding:'Bidding',awarded:'Awarded',in_progress:'In Progress',completed:'Completed'};
+    const cancelled = m.status==='cancelled';
+    const cur = order.indexOf(m.status);
+    return order.map((k,i)=>{
+      const reached = !cancelled && i<=cur; const isCur = !cancelled && i===cur; const c=this.STATUS[k].color;
+      return {
+        label:labels[k], notLast:i<order.length-1,
+        dotStyle:{width:'12px',height:'12px',borderRadius:'50%',boxSizing:'border-box',flexShrink:0,border:'2px solid '+(reached?c:'#cbd5df'),background:reached?c:'#ffffff',boxShadow:isCur?'0 0 0 4px '+this.hexA(c,0.16):'none'},
+        labelStyle:{fontFamily:"'IBM Plex Mono',monospace",fontSize:'11px',letterSpacing:'.03em',color:reached?'#1b2732':'#9aa8b6',whiteSpace:'nowrap'},
+        lineStyle:{width:'26px',height:'2px',margin:'0 8px',flexShrink:0,background:(i<cur&&!cancelled)?'#aebfd0':'#e2e8ef'}
+      };
+    });
+  }
+
+  renderVals(){
+    const s = this.state; const me = s.session; const R = {};
+    R.isLanding = s.screen==='landing';
+    R.showTopbar = !!me && s.screen!=='landing';
+    R.isDesigner = me && me.role==='designer';
+    R.isPilot = me && me.role==='pilot';
+    R.roleName = me?me.name:'';
+    R.roleLabel = me ? (me.role==='designer'?'Mission Designer':(me.role==='admin'?'Platform Admin':'Pilot')) : '';
+    R.roleColorObj = me && me.role==='pilot' ? { bg:'#12a06a', halo:'rgba(18,160,106,.18)' } : (me && me.role==='admin' ? { bg:'#6d5ef0', halo:'rgba(109,94,240,.18)' } : { bg:'#2f6bff', halo:'rgba(47,107,255,.18)' });
+    R.homeClick = ()=> this.setState({screen: me && me.role==='designer'?'dashboard':(me&&me.role==='admin'?'admin-overview':'feed'), activeId:null, editor:null});
+    R.pickDesigner = ()=>this.pickRole('designer');
+    R.pickPilot = ()=>this.pickRole('pilot');
+    R.switchRole = ()=>this.setState({session:null, screen:'landing', activeId:null, editor:null});
+    R.goDashboard = ()=>this.setState({screen:'dashboard', activeId:null, editor:null});
+    R.goNew = ()=>{ if(me && this.isSuspended(me.name)){ this.toast('Your account is suspended — you cannot create missions','#e04a3f'); return; } this.openEditor(null); };
+    R.goFeedOpen = ()=>this.setState({screen:'feed', pilotTab:'open', activeId:null, editor:null});
+    R.goFeedMine = ()=>this.setState({screen:'feed', pilotTab:'mine', activeId:null, editor:null});
+    R.resetDemo = ()=>this.resetDemo();
+    R.toast = s.toast; R.toastMsg = s.toast?s.toast.msg:''; R.toastColor = s.toast?s.toast.color:'#2f6bff';
+    const cf = s.confirm;
+    R.confirm = cf; R.confirmTitle = cf?cf.title:''; R.confirmBody = cf?cf.body:''; R.confirmLabel = cf?cf.confirmLabel:'';
+    R.confirmAccent = cf ? (cf.tone==='warn'?'#d9860a':'#e04a3f') : '#e04a3f';
+    R.confirmIconStyle = cf ? {width:'34px',height:'34px',borderRadius:'9px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'17px',fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",background:cf.tone==='warn'?'#fdf8ef':'#fdf3f2',border:'1px solid '+(cf.tone==='warn'?'#f2e0c4':'#f0d5d3'),color:cf.tone==='warn'?'#a8720b':'#c0574d'} : {};
+    R.confirmYesStyle = cf ? {flex:1,background:cf.tone==='warn'?'#d9860a':'#e04a3f',border:'none',color:'#fff',fontSize:'13.5px',fontWeight:600,padding:'11px',borderRadius:'9px',cursor:'pointer',boxShadow:'0 3px 12px '+(cf.tone==='warn'?'rgba(217,134,10,.26)':'rgba(224,74,63,.26)')} : {};
+    R.confirmYes = ()=>{ if(s.confirm && s.confirm.onYes) s.confirm.onYes(); };
+    R.confirmNo = ()=>this.setState({confirm:null});
+
+    R.lifecycleChips = ['draft','published','bidding','awarded','in_progress','completed'].map((k,i,a)=>({label:this.STATUS[k].label, color:this.STATUS[k].color, notLast:i<a.length-1}));
+
+    R.isAdmin = me && me.role==='admin';
+    R.pickAdmin = ()=>this.setState({session:{role:'admin',name:this.ADMIN}, screen:'admin-overview', activeId:null, editor:null, adminSearch:''});
+    R.goAdminOverview = ()=>this.setState({screen:'admin-overview', activeId:null});
+    R.goAdminMissions = ()=>this.setState({screen:'admin-missions', activeId:null, adminSearch:''});
+    R.goAdminUsers = ()=>this.setState({screen:'admin-users', activeId:null});
+    R.goAdminAudit = ()=>this.setState({screen:'admin-audit', activeId:null});
+    R.isAdminOverview = R.isAdmin && s.screen==='admin-overview';
+    R.isAdminMissions = R.isAdmin && s.screen==='admin-missions';
+    R.isAdminUsers = R.isAdmin && s.screen==='admin-users';
+    R.isAdminAudit = R.isAdmin && s.screen==='admin-audit';
+    R.adminSearch = s.adminSearch;
+    R.onAdminSearch = e=>this.setState({adminSearch:e.target.value});
+    R.mySuspended = !!(me && me.role!=='admin' && this.isSuspended(me.name));
+    R.suspendMsg = me && me.role==='pilot'
+      ? 'Your pilot account is suspended. You cannot place bids, be awarded missions, or execute awarded jobs. Contact platform support.'
+      : 'Your designer account is suspended. You cannot create, edit, or publish missions, and your published missions are not accepting bids.';
+
+    if(R.isAdmin){
+      const live = s.missions.filter(m=>!m.removed);
+      const order=['draft','published','bidding','awarded','in_progress','completed','cancelled'];
+      const byStatus = order.map(k=>({key:k, label:this.STATUS[k].label, color:this.STATUS[k].color, n:live.filter(m=>m.status===k).length}));
+      const maxS = Math.max(1,...byStatus.map(b=>b.n));
+      R.statusBars = byStatus.map(b=>({label:b.label, n:b.n, barStyle:{height:'100%',width:(b.n/maxS*100)+'%',minWidth:b.n?'3px':'0',background:b.color,borderRadius:'4px',transition:'width .3s ease'}}));
+      const allBids = live.flatMap(m=>(m.bids||[]).map(b=>({...b,mission:m.title})));
+      const vol = allBids.reduce((a,b)=>a+b.price,0);
+      const pilots = s.users.filter(u=>u.role==='pilot');
+      const designers = s.users.filter(u=>u.role==='designer');
+      R.adminStats = [
+        {label:'Total missions', value:live.length, color:'#1b2732'},
+        {label:'Active pilots', value:pilots.filter(u=>!u.suspended).length, color:'#12a06a'},
+        {label:'Suspended', value:s.users.filter(u=>u.suspended).length, color:'#e04a3f'},
+        {label:'Total bids', value:allBids.length, color:'#d9860a'},
+        {label:'Bid volume', value:'$'+vol.toLocaleString('en-US'), color:'#7c5cff'},
+        {label:'Avg bid', value:allBids.length?('$'+Math.round(vol/allBids.length)):'—', color:'#0e9bb5'}
+      ];
+      const topB = live.filter(m=>(m.bids||[]).length).sort((a,b)=>(b.bids||[]).length-(a.bids||[]).length).slice(0,6);
+      const maxB = Math.max(1,...topB.map(m=>(m.bids||[]).length));
+      R.bidBars = topB.map(m=>({label:m.title.split(' — ')[0].slice(0,24), n:(m.bids||[]).length, colStyle:{width:'100%',height:((m.bids||[]).length/maxB*100)+'%',minHeight:'4px',background:'linear-gradient(180deg,#5b8cff,#2f6bff)',borderRadius:'5px 5px 0 0',transition:'height .3s ease'}}));
+      R.bidBarsEmpty = R.bidBars.length===0;
+      R.roleSplit = [
+        {label:'Designers', n:designers.length, color:'#2f6bff', barStyle:{height:'8px',borderRadius:'4px',background:'#2f6bff',width:(designers.length/Math.max(1,s.users.length)*100)+'%'}},
+        {label:'Pilots', n:pilots.length, color:'#12a06a', barStyle:{height:'8px',borderRadius:'4px',background:'#12a06a',width:(pilots.length/Math.max(1,s.users.length)*100)+'%'}}
+      ];
+      const aq=s.adminSearch.trim().toLowerCase();
+      R.adminMissions = s.missions.filter(m=>!aq||m.title.toLowerCase().includes(aq)||(m.designer||'').toLowerCase().includes(aq)).sort((a,b)=>b.created-a.created).map(m=>{
+        const st=this.STATUS[m.status];
+        return {
+          title:m.title, designer:m.designer, location:m.location, statusLabel:st.label,
+          badgeStyle:{display:'inline-flex',alignItems:'center',gap:'6px',fontFamily:"'IBM Plex Mono',monospace",fontSize:'9.5px',fontWeight:600,letterSpacing:'.09em',textTransform:'uppercase',padding:'3px 9px',borderRadius:'20px',background:this.hexA(st.color,0.1),border:'1px solid '+this.hexA(st.color,0.34),color:st.color,whiteSpace:'nowrap'},
+          bidCount:(m.bids||[]).length, dates:this.fmtRange(m.startDate,m.endDate),
+          designerFlag: this.isSuspended(m.designer) ? 'suspended' : '',
+          isHidden:!!m.hidden, isRemoved:!!m.removed,
+          stateNote: m.removed?'Removed':(m.hidden?'Hidden':'Visible'),
+          stateStyle:{fontFamily:"'IBM Plex Mono',monospace",fontSize:'10px',letterSpacing:'.08em',textTransform:'uppercase',color:m.removed?'#e04a3f':(m.hidden?'#d9860a':'#93a1b0')},
+          rowStyle:{display:'grid',gridTemplateColumns:'1fr 150px 108px 74px 190px',gap:'14px',alignItems:'center',padding:'13px 18px',borderBottom:'1px solid #eef2f6',opacity:m.removed?0.5:1},
+          toggleHide:()=>this.setMissionFlag(m.id,'hidden',!m.hidden, m.hidden?'Unhid mission':'Hid mission'),
+          toggleRemove:()=>this.setMissionFlag(m.id,'removed',!m.removed, m.removed?'Restored mission':'Removed mission'),
+          hideLabel:m.hidden?'Unhide':'Hide', removeLabel:m.removed?'Restore':'Remove'
+        };
+      });
+      R.adminMissionsEmpty = R.adminMissions.length===0;
+      R.adminUsers = s.users.map(u=>{
+        const authored=s.missions.filter(m=>m.designer===u.name).length;
+        const placed=s.missions.flatMap(m=>m.bids||[]).filter(b=>b.pilot===u.name).length;
+        const won=s.missions.filter(m=>m.awardedTo===u.name).length;
+        return {
+          name:u.name, role:u.role==='designer'?'Mission Designer':'Pilot', licence:u.licence,
+          roleStyle:{fontFamily:"'IBM Plex Mono',monospace",fontSize:'9.5px',fontWeight:600,letterSpacing:'.09em',textTransform:'uppercase',padding:'3px 9px',borderRadius:'20px',whiteSpace:'nowrap',background:u.role==='designer'?'#eaf0ff':'#e5f6ee',border:'1px solid '+(u.role==='designer'?'#d3e0ff':'#c5ecda'),color:u.role==='designer'?'#2f6bff':'#0f8c5c'},
+          activity: u.role==='designer' ? (authored+' missions authored') : (placed+' bids · '+won+' won'),
+          suspended:u.suspended,
+          statusLabel:u.suspended?'Suspended':'Active',
+          statusStyle:{display:'inline-flex',alignItems:'center',gap:'6px',fontFamily:"'IBM Plex Mono',monospace",fontSize:'10px',letterSpacing:'.08em',textTransform:'uppercase',color:u.suspended?'#e04a3f':'#12a06a'},
+          statusDot:{width:'6px',height:'6px',borderRadius:'50%',background:u.suspended?'#e04a3f':'#12a06a'},
+          joined:new Date(u.joined).toLocaleDateString('en-US',{month:'short',year:'numeric'}),
+          rowStyle:{display:'grid',gridTemplateColumns:'1fr 160px 190px 120px 116px',gap:'14px',alignItems:'center',padding:'13px 18px',borderBottom:'1px solid #eef2f6',background:u.suspended?'#fdf6f5':'transparent'},
+          btnStyle:u.suspended
+            ? {background:'#e5f6ee',border:'1px solid #bfe8d5',color:'#0f8c5c',fontSize:'12.5px',fontWeight:600,padding:'7px 13px',borderRadius:'7px',cursor:'pointer',width:'100%'}
+            : {background:'#fff',border:'1px solid #f0d5d3',color:'#c0574d',fontSize:'12.5px',fontWeight:600,padding:'7px 13px',borderRadius:'7px',cursor:'pointer',width:'100%'},
+          btnLabel:u.suspended?'Reactivate':'Suspend',
+          toggle:()=>this.toggleSuspend(u.name)
+        };
+      });
+      R.auditRows = s.audit.slice(0,60).map(a=>({
+        actor:a.actor, action:a.action, target:a.target||'—',
+        when:this.fmtWhen(a.at),
+        roleLabel:a.role==='admin'?'Admin':(a.role==='designer'?'Designer':'Pilot'),
+        roleStyle:{fontFamily:"'IBM Plex Mono',monospace",fontSize:'9px',fontWeight:600,letterSpacing:'.09em',textTransform:'uppercase',padding:'2px 8px',borderRadius:'20px',whiteSpace:'nowrap',background:a.role==='admin'?'#f3f1ff':(a.role==='designer'?'#eaf0ff':'#e5f6ee'),color:a.role==='admin'?'#6d4ff0':(a.role==='designer'?'#2f6bff':'#0f8c5c')},
+        dotStyle:{width:'9px',height:'9px',borderRadius:'50%',flexShrink:0,marginTop:'5px',background:a.role==='admin'?'#6d5ef0':(a.role==='designer'?'#2f6bff':'#12a06a')}
+      }));
+      R.auditEmpty = R.auditRows.length===0;
+    }
+
+    R.isDesignerDash = R.isDesigner && s.screen==='dashboard';
+    R.isEditor = s.screen==='editor';
+    R.isDesignerDetail = R.isDesigner && s.screen==='detail';
+    R.isPilotFeed = R.isPilot && s.screen==='feed';
+    R.isPilotDetail = R.isPilot && s.screen==='detail';
+
+    /* dashboard */
+    const mine = s.missions.filter(m=>me && m.designer===me.name && !m.removed).sort((a,b)=>b.created-a.created);
+    R.dashMissions = mine.map(m=>{ const v=this.vm(m); v.open = ()=> m.status==='draft'?this.openEditor(m.id):this.openDetail(m.id); return v; });
+    R.dashEmpty = mine.length===0;
+    const cnt = st => mine.filter(m=>m.status===st).length;
+    R.dashStats = [
+      {label:'Total', value:mine.length, color:'#1b2732'},
+      {label:'Live', value:cnt('published')+cnt('bidding'), color:'#d9860a'},
+      {label:'Awarded', value:cnt('awarded')+cnt('in_progress'), color:'#7c5cff'},
+      {label:'Completed', value:cnt('completed'), color:'#12a06a'}
+    ];
+
+    /* editor */
+    const ed = s.editor;
+    R.editor = ed || {title:'',description:'',location:'',startDate:'',endDate:'',biddingDeadline:''};
+    R.editorTitleHeader = ed ? (ed.id?'Edit Mission':'New Mission') : '';
+    R.editorMapEl = ed ? this.buildMap(ed.waypoints,{editable:true, seed:'editor-'+(ed.id||'new'), view:ed.view, geofence:ed.geofence}) : null;
+    R.editorWp = ed ? ed.waypoints.length : 0;
+    R.editorDistance = ed ? this.distanceText(ed.waypoints) : '0.00 km';
+    R.editorDuration = ed ? this.durationText(ed.waypoints) : '0 min';
+    const editingPublished = ed && ed.id && (()=>{ const m=s.missions.find(x=>x.id===ed.id); return m && m.status!=='draft'; })();
+    R.editorShowDraftBtn = ed && !editingPublished;
+    R.editorPublishLabel = editingPublished ? 'Save changes' : 'Publish mission';
+    const canPub = ed && ed.title.trim().length>0 && ed.waypoints.length>=2;
+    R.publishBtnStyle = { bg: (editingPublished||canPub)?'#2f6bff':'#a7c2f5', cursor:(editingPublished||canPub)?'pointer':'not-allowed', opacity:(editingPublished||canPub)?'1':'0.7' };
+    const okTitle = ed && ed.title.trim().length>0; const okWp = ed && ed.waypoints.length>=2;
+    R.checkTitle = { mark: okTitle?'✓':'○', color: okTitle?'#12a06a':'#a2afbc' };
+    R.checkWp = { mark: okWp?'✓':'○', color: okWp?'#12a06a':'#a2afbc' };
+    R.addBtnStyle = this.modeBtn(ed && ed.mode==='add');
+    R.selectBtnStyle = this.modeBtn(ed && ed.mode==='select');
+    R.panBtnStyle = this.modeBtn(ed && ed.mode==='pan');
+    R.zoneIsCircle = !!(ed && ed.geofence && ed.geofence.type==='circle');
+    R.zoneCircleStyle = this.zoneToggleBtn(ed && ed.geofence && ed.geofence.type==='circle');
+    R.zonePolyStyle = this.zoneToggleBtn(ed && ed.geofence && ed.geofence.type==='polygon');
+    R.setZoneCircle = ()=>this.zoneToCircle();
+    R.setZonePolygon = ()=>this.zoneToPolygon();
+    R.setPanMode = ()=>this.setEditor({mode:'pan', selectedIdx:-1});
+    R.zoomIn = ()=>{ const v=(this.state.editor&&this.state.editor.view)||this.defView(); this.zoomAround(0.78, v.x+v.w/2, v.y+v.h/2); };
+    R.zoomOut = ()=>{ const v=(this.state.editor&&this.state.editor.view)||this.defView(); this.zoomAround(1.28, v.x+v.w/2, v.y+v.h/2); };
+    R.zoomReset = ()=>this.setEditor({view:this.defView()});
+    R.onTitle = e=>this.setEditor({title:e.target.value});
+    R.onLocation = e=>this.setEditor({location:e.target.value});
+    R.onDesc = e=>this.setEditor({description:e.target.value});
+    R.onStart = e=>this.setEditor({startDate:e.target.value});
+    R.onEnd = e=>this.setEditor({endDate:e.target.value});
+    R.onDeadline = e=>this.setEditor({biddingDeadline:e.target.value});
+    R.setAddMode = ()=>this.setEditor({mode:'add', selectedIdx:-1});
+    R.setSelectMode = ()=>this.setEditor({mode:'select',selectedIdx:-1});
+    R.editorUndo = ()=>this.setState(st=>({editor:{...st.editor,waypoints:st.editor.waypoints.slice(0,-1),selectedIdx:-1}}));
+    R.editorClear = ()=>this.setEditor({waypoints:[],selectedIdx:-1});
+    R.saveDraft = ()=>this.saveEditor('draft');
+    R.publishMission = ()=>this.saveEditor(editingPublished?'draft':'publish');
+    R.cancelEdit = ()=>this.setState({screen: me.role==='designer'?'dashboard':'feed', editor:null});
+    R.setCoordEl = el=>{ this.coordEl=el; };
+
+    /* feed (pilot) */
+    R.pilotTab = s.pilotTab; R.showOpen = s.pilotTab==='open'; R.showJobs = s.pilotTab==='mine';
+    R.feedTitle = s.pilotTab==='open' ? 'Open Missions' : 'My Bids & Jobs';
+    R.tabOpenStyle = this.tabBtn(s.pilotTab==='open');
+    R.tabMineStyle = this.tabBtn(s.pilotTab==='mine');
+    R.search = s.search;
+    R.onSearch = e=>this.setState({search:e.target.value});
+    R.setTabOpen = ()=>this.setState({pilotTab:'open'});
+    R.setTabMine = ()=>this.setState({pilotTab:'mine'});
+    const q = s.search.trim().toLowerCase();
+    const visible = m=>!m.hidden && !m.removed && !this.isSuspended(m.designer);
+    const openM = s.missions.filter(m=>(m.status==='published'||m.status==='bidding') && visible(m)).filter(m=>!q||m.title.toLowerCase().includes(q)).sort((a,b)=>b.created-a.created);
+    const jobsM = s.missions.filter(m=> me && !m.removed && ((m.bids||[]).some(b=>b.pilot===me.name) || m.awardedTo===me.name)).sort((a,b)=>b.created-a.created);
+    const toFeedVm = m=>{ const v=this.vm(m); v.open=()=>this.openDetail(m.id); const mb=(m.bids||[]).find(b=>me && b.pilot===me.name); v.hasMyBid=!!mb; v.myBidText = mb?('Your bid · $'+mb.price):''; return v; };
+    R.feedList = (s.pilotTab==='open'?openM:jobsM).map(toFeedVm);
+    R.feedEmpty = R.feedList.length===0;
+    R.feedEmptyTitle = s.pilotTab==='open' ? (q?'No missions match your search':'No open missions right now') : 'Nothing here yet';
+    R.feedEmptySub = s.pilotTab==='open' ? 'Try a different search term.' : 'Bids you place and jobs you win will show up here.';
+
+    /* active detail */
+    const am = s.missions.find(m=>m.id===s.activeId);
+    if(am){
+      const v = this.vm(am); R.activeVm = v;
+      R.detailMapEl = this.buildMap(am.waypoints||[],{editable:false, seed:am.id, geofence:am.geofence});
+      R.activeSteps = this.buildSteps(am);
+      R.backFromDetail = ()=>this.setState({screen: me.role==='designer'?'dashboard':(me.role==='admin'?'admin-missions':'feed'), activeId:null});
+      R.canEditActive = am.status==='draft'||am.status==='published';
+      R.canPublishActive = am.status==='draft';
+      R.canCancelActive = ['draft','published','bidding'].includes(am.status);
+      R.actEdit = ()=>this.openEditor(am.id);
+      R.actPublish = ()=>this.setStatus(am.id,'published','Mission published — now collecting bids','#0e9bb5');
+      R.actCancel = ()=>this.setState({confirm:{
+        title:'Cancel this mission?',
+        body:'“'+am.title+'” will be cancelled permanently — the lifecycle only moves forward, so it cannot be reopened'+((am.bids||[]).length?' and its '+(am.bids||[]).length+' bid'+((am.bids||[]).length===1?'':'s')+' will be dropped':'')+'.',
+        confirmLabel:'Cancel mission', tone:'danger',
+        onYes:()=>{ this.setState({confirm:null}); this.setStatus(am.id,'cancelled','Mission cancelled','#e04a3f'); }
+      }});
+      R.activeBidsEmpty = (am.bids||[]).length===0;
+      const canAward = am.status==='published'||am.status==='bidding';
+      R.activeBids = (am.bids||[]).slice().sort((a,b)=>a.price-b.price).map((b,i)=>({
+        pilot:b.pilot, firstName:b.pilot.split(' ')[0], price:'$'+b.price, when:this.fmtWhen(b.at),
+        isAccepted:b.status==='accepted', isDeclined:b.status==='declined',
+        priceColor: b.status==='accepted'?'#7c5cff':(b.status==='declined'?'#9aa8b6':'#1b2732'),
+        canAward: canAward && b.status==='pending',
+        award: ()=>this.awardBid(am.id,b.id),
+        rowStyle:{padding:'15px 18px', borderBottom:'1px solid #eef2f6', background: b.status==='accepted'?'#faf9ff':'transparent', opacity: b.status==='declined'?0.55:1}
+      }));
+      const mb = (am.bids||[]).find(b=>me && b.pilot===me.name);
+      R.hasMyBid = !!mb; R.myBidPrice = mb?('$'+mb.price):'';
+      const meSusp = me && me.role!=='admin' && this.isSuspended(me.name);
+      const designerSusp = this.isSuspended(am.designer);
+      R.bidBlocked = !!(meSusp || designerSusp);
+      R.bidBlockedMsg = meSusp ? 'Your account is suspended — you cannot bid on missions.' : 'This mission’s designer is suspended and is not accepting bids.';
+      R.canBid = (am.status==='published'||am.status==='bidding') && !R.bidBlocked;
+      R.execBlocked = !!meSusp;
+      R.bidLabel = mb ? 'Update your bid (USD)' : 'Your bid (USD)';
+      R.bidButtonLabel = mb ? 'Update bid' : 'Place bid';
+      R.awardedToMe = me && am.awardedTo===me.name;
+      R.awardedToOther = am.awardedTo && me && am.awardedTo!==me.name;
+      R.showInProgressBtn = R.awardedToMe && am.status==='awarded' && !meSusp;
+      R.showCompletedBtn = R.awardedToMe && am.status==='in_progress' && !meSusp;
+      R.isCompletedActive = am.status==='completed';
+      R.awardMessage = am.status==='awarded' ? 'You won this job. Mark it in progress when you begin the flight.' : (am.status==='in_progress' ? 'Flight in progress. Mark it completed when the mission is done.' : 'This mission is complete. Nice flying.');
+      R.bidDraft = s.bidDraft;
+      R.onBid = e=>this.setState({bidDraft:e.target.value});
+      R.placeBid = ()=>this.placeBid(am.id);
+      R.markInProgress = ()=>this.setStatus(am.id,'in_progress','Mission marked In Progress','#2f6bff');
+      R.markCompleted = ()=>this.setStatus(am.id,'completed','Mission completed','#12a06a');
+    }
+    return R;
+  }
+
+  modeBtn(active){ return active
+    ? {background:'#2f6bff',border:'none',color:'#fff',fontSize:'12.5px',fontWeight:600,padding:'7px 13px',borderRadius:'7px',cursor:'pointer',boxShadow:'0 1px 3px rgba(47,107,255,.35)'}
+    : {background:'transparent',border:'none',color:'#5c6b7a',fontSize:'12.5px',fontWeight:500,padding:'7px 13px',borderRadius:'7px',cursor:'pointer'}; }
+  tabBtn(active){ return active
+    ? {background:'#ffffff',border:'none',color:'#1b2732',fontSize:'13px',fontWeight:600,padding:'8px 16px',borderRadius:'7px',cursor:'pointer',boxShadow:'0 1px 3px rgba(20,35,55,.10)'}
+    : {background:'transparent',border:'none',color:'#5c6b7a',fontSize:'13px',fontWeight:500,padding:'8px 16px',borderRadius:'7px',cursor:'pointer'}; }
+  zoneToggleBtn(active){ return active
+    ? {background:'#6d5ef0',border:'none',color:'#fff',fontSize:'12px',fontWeight:600,padding:'6px 11px',borderRadius:'6px',cursor:'pointer'}
+    : {background:'transparent',border:'none',color:'#5c6b7a',fontSize:'12px',fontWeight:500,padding:'6px 11px',borderRadius:'6px',cursor:'pointer'}; }
+}
+</script>
+</body>
+</html>

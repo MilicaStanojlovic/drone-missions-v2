@@ -1,11 +1,22 @@
 # dependencies
 node_modules/
 .pnpm-store/
+/.pnp
+.pnp.*
 
 # next.js
 .next/
 out/
 next-env.d.ts
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# drizzle-kit output — Flyway owns the schema, nothing legitimately writes
+# here (see src/db/schema.ts); scripts/check-schema-drift.mjs uses its own
+# mkdtempSync temp dirs instead of this directory.
+drizzle/
 
 # builds & coverage
 dist/
@@ -20,8 +31,13 @@ test-results/
 
 # logs & OS noise
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 .DS_Store
 Thumbs.db
+*.pem
 
 # editor
 .idea/
@@ -29,3 +45,6 @@ Thumbs.db
 
 # per-phase working plans (checked-off records stay local)
 plans/
+
+# machine-specific Claude Code overrides (agents/ and workflows/ ARE shared)
+.claude/settings.local.json
