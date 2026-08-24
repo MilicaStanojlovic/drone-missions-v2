@@ -9,7 +9,7 @@ import { AUDIT_ACTIONS, USER_ROLES } from "@/db/schema";
  *
  * The audit read path has no request *body* at all — it is a single GET — so
  * this module holds the only input it accepts. Modelled on
- * `src/features/users/user.schema.ts`, whose `userListQuerySchema` ports the
+ * `src/features/users/server/user.schema.ts`, whose `userListQuerySchema` ports the
  * same conversion for the one filter that listing takes.
  *
  * SOURCE:

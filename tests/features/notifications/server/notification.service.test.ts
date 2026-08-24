@@ -34,7 +34,7 @@ import { NewNotification, type NotificationType } from "@/features/notifications
  * - `existsByUser_IdAndMission_IdAndType` — the overdue-sweep dedupe, which
  *   has to match on all three columns.
  *
- * Live-DB only, following `src/lib/audit.test.ts` and the auth/users route
+ * Live-DB only, following `tests/lib/audit.test.ts` and the auth/users route
  * suites: runs against the Postgres named by `DATABASE_URL` (this worktree's
  * `dronemissions_p4`, per `.env.local`), and skips with a visible reason when
  * none is configured. `vitest.config.ts` forwards the variable from

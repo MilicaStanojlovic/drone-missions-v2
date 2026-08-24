@@ -10,7 +10,7 @@ import type { Bid } from "@/features/bids/bid.types";
  * `POST|GET /api/v1/bids/mission/{missionId}`, `GET /api/v1/bids/my`,
  * `DELETE /api/v1/bids/{id}`, and `POST /api/v1/bids/{id}/accept`.
  *
- * Shaped like `src/app/api/v1/missions/routes.test.ts` rather than the live-DB
+ * Shaped like `tests/app/api/v1/missions/routes.test.ts` rather than the live-DB
  * notification/auth suites: `BidService` is mocked and the exported handlers
  * are called directly, so every assertion here is about what the *web layer*
  * contributes — the role guards, the request validation, the status codes, and
@@ -25,12 +25,12 @@ import type { Bid } from "@/features/bids/bid.types";
  * `MissionNotFoundError` -> 404, a closed mission / passed deadline /
  * already-decided bid as `BidConflictError` -> 409, and someone else's bid as
  * `BidNotFoundError` -> 404. Their real behavior is pinned one layer down in
- * `src/features/bids/bid.service.test.ts`.
+ * `tests/features/bids/server/bid.service.test.ts`.
  *
  * All five paths are authenticated-only — none are in `src/middleware.ts`'s
  * `PUBLIC_PATHS` — so the anonymous cases call `middleware()` directly, the
  * layer that actually rejects them in the deployed app (the precedent set by
- * `src/app/api/v1/notifications/routes.test.ts`), while the authenticated
+ * `tests/app/api/v1/notifications/routes.test.ts`), while the authenticated
  * cases pass the `x-user-id`/`x-user-role` headers `middleware.ts` would have
  * attached from the verified token's claims.
  *

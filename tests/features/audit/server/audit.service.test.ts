@@ -21,7 +21,7 @@ import type { AuditLog, AuditSearchFilters } from "@/features/audit/audit.types"
  * What the mock necessarily hides — that the pattern it hands over really does
  * match the rows an admin is looking for, over real SQL — lives in
  * `audit.queries.test.ts` (live DB), with the endpoint on top of it in
- * `src/app/api/v1/audit-log/routes.live.test.ts`.
+ * `tests/app/api/v1/audit-log/routes.live.test.ts`.
  *
  * SOURCE:
  * - drone-missions-backend/.../src/test/.../business/service/audit/AuditServiceTest.java

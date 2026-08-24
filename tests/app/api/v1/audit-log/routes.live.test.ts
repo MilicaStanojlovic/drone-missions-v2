@@ -32,7 +32,7 @@ import { GET as auditLogRoute } from "@/app/api/v1/audit-log/route";
  *
  * The filter *combinations* and the SQL rules beneath them (the two-LIKEs-OR'd
  * text match, the `id DESC` tiebreaker, the count carrying the join) are pinned
- * one level down, in `src/features/audit/audit.queries.test.ts`; this file
+ * one level down, in `tests/features/audit/server/audit.queries.test.ts`; this file
  * checks the endpoint's own contract on top of them.
  *
  * The 401 case is not repeated here — anonymous rejection happens in

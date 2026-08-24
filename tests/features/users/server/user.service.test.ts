@@ -50,12 +50,12 @@ import { UserNotFoundError } from "@/features/users/server/user.queries";
  *
  * Live-DB route-level integration coverage of `GET /api/v1/users/me` itself
  * (own profile, anonymous -> 401, deleted-id -> 404) lives in
- * `src/app/api/v1/users/me/route.test.ts`, mirroring the split between this
- * file and `src/app/api/v1/auth/routes.test.ts`.
+ * `tests/app/api/v1/users/me/route.test.ts`, mirroring the split between this
+ * file and `tests/app/api/v1/auth/routes.test.ts`.
  *
  * The three collaborators being mocked is also this suite's blind spot, and
  * two live-DB suites cover it: `user.queries.test.ts` for the SQL beneath
- * `search`/`setSuspended`, and `src/app/api/v1/users/routes.live.test.ts` for
+ * `search`/`setSuspended`, and `tests/app/api/v1/users/routes.live.test.ts` for
  * the whole admin surface over real rows — including the one rule no mock can
  * show, that `invalidateLists()` really does drop a suspended designer's
  * missions out of a warm marketplace cache.

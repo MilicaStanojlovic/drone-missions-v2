@@ -68,8 +68,8 @@ import { POST as cancelRoute } from "@/app/api/v1/missions/[id]/cancel/route";
  * inside it would still be talking to the mocks.
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
- * the same shape as `src/app/api/v1/auth/routes.test.ts` and
- * `src/lib/audit.test.ts`, which `vitest.config.ts` forwards the variable for.
+ * the same shape as `tests/app/api/v1/auth/routes.test.ts` and
+ * `tests/lib/audit.test.ts`, which `vitest.config.ts` forwards the variable for.
  *
  * There is no Spring counterpart to mirror here: the backend has no
  * `@SpringBootTest` integration suite (its mission tests are the Mockito

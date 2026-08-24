@@ -19,7 +19,7 @@ import type { MissionStatus, MissionWrite } from "@/features/missions/mission.ty
  * `docker compose up db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8).
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
- * the same shape as `src/lib/audit.test.ts` and the auth route suite;
+ * the same shape as `tests/lib/audit.test.ts` and the auth route suite;
  * `vitest.config.ts` forwards the variable from `.env.local`/`.env`.
  *
  * This module deliberately imports `mission.queries.ts` directly rather than

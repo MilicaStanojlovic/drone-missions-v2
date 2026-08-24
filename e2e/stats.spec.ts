@@ -37,7 +37,7 @@ import postgres from "postgres";
  * the rendered page is asserted to equal them exactly — which is what "accurate
  * tiles" has to mean on a shared database. That the endpoint's own arithmetic
  * is right is pinned separately and exhaustively by
- * `src/app/api/v1/platform-stats/routes.live.test.ts` (foreign aggregates +
+ * `tests/app/api/v1/platform-stats/routes.live.test.ts` (foreign aggregates +
  * fixture, to the cent); what this spec adds is the other half: that the
  * browser renders those numbers, in the right places, through the real guard,
  * with no error state.

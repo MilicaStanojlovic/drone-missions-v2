@@ -16,7 +16,7 @@ import { POST as markAllReadRoute } from "@/app/api/v1/notifications/read-all/ro
  * Route-level integration suite for
  * `/api/v1/notifications{,/unread-count,/{id}/read,/read-all}`.
  *
- * Live-DB only, mirroring `src/app/api/v1/users/me/route.test.ts`: calls the
+ * Live-DB only, mirroring `tests/app/api/v1/users/me/route.test.ts`: calls the
  * real exported handlers against the Postgres named by `DATABASE_URL` (this
  * worktree's `dronemissions_p4`), and skips with a visible reason when none
  * is configured.
@@ -34,7 +34,7 @@ import { POST as markAllReadRoute } from "@/app/api/v1/notifications/read-all/ro
  * the literal `{"count": n}` envelope `Map.of("count", ...)` serializes to,
  * and `ResponseEntity.noContent()`'s body-less 204s. The underlying
  * behavior (ordering, dedupe, idempotence) is covered one layer down in
- * `src/features/notifications/notification.service.test.ts`.
+ * `tests/features/notifications/server/notification.service.test.ts`.
  *
  * Mission rows are inserted straight through Drizzle against `mission` in
  * `src/db/schema.ts` — this phase has no missions feature module to import.

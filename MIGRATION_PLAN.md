@@ -147,15 +147,19 @@ drone-missions/
 ```
 
 **Rules:** `app/` is routing-only; handlers stay thin; each feature owns its vertical slice;
-`import 'server-only'` on every service/query/db module, and those modules live in
-`features/<f>/server/` so the boundary is visible in the tree (types/client/isomorphic helpers
-stay at the feature root, since client code imports them); no barrel `index.ts` in `features/*`;
-`middleware.ts` under `src/`; Vitest suites live in `tests/` mirroring `src/`, never beside the
-module. Inside every feature the old Spring layering survives:
+`import 'server-only'` on every service/query/db module, and every module whose *runtime* is
+server-side lives in `features/<f>/server/` so the boundary is visible in the tree. Types,
+`*.client.ts` and isomorphic helpers stay at the feature root because client code imports them —
+note several `*.types.ts` keep a `server-only` marker guarding their runtime exports while
+components import them with `import type`, which erases, so "carries the marker" alone does not
+imply "belongs in `server/`". No barrel `index.ts` in `features/*`; `middleware.ts` under `src/`;
+Vitest suites live in `tests/` mirroring `src/`, never beside the module. Inside every feature the
+old Spring layering survives:
 **route → service → queries** = **controller → @Service → repository/MissionDao**.
 
-**Imports:** cross-file imports use the `@/…` alias everywhere; only files inside
-`features/<f>/components/` use relative imports (`../mission.client`).
+**Imports:** use the `@/…` alias for anything crossing a directory boundary; relative imports are
+for same-directory siblings only (`./schema` in `db/client.ts`, `./layout` in `emails/*`,
+`../mission.client` from a feature's `components/`).
 
 ---
 

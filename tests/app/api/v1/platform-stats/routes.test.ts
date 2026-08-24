@@ -30,7 +30,7 @@ import type { PlatformStats } from "@/features/stats/stats.types";
  * maps are zero-filled over every status/role, because that is what the real
  * `overview()` always returns — `PlatformStats` types them as full `Record`s,
  * not `Partial`s, and the zero-filling is the service's job (pinned by
- * `src/features/stats/stats.service.test.ts`). Stubbing a shape the service
+ * `tests/features/stats/server/stats.service.test.ts`). Stubbing a shape the service
  * cannot produce would test the route against fiction.
  *
  * The 401 case goes through `middleware()` itself, the layer that actually

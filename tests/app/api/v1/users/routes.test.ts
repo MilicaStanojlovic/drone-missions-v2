@@ -15,9 +15,9 @@ import type { User } from "@/features/users/user.types";
  * are about what the *web layer* does — the filter and page request it hands
  * the service, the envelope it wraps the answer in, the response shape each
  * endpoint chooses, and the authorization each one enforces. That is the same
- * shape as `src/app/api/v1/missions/routes.test.ts`: `search`, `suspend` and
+ * shape as `tests/app/api/v1/missions/routes.test.ts`: `search`, `suspend` and
  * `reactivate` already have their own behavior suite in
- * `src/features/users/user.service.test.ts`.
+ * `tests/features/users/server/user.service.test.ts`.
  *
  * The same endpoints over a real database — the writes, the audit rows, the
  * cache eviction and the bcrypt hash, none of which survive a mocked service —

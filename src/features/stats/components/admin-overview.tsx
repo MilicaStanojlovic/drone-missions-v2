@@ -24,7 +24,7 @@ import { fetchPlatformStats, type PlatformStats, type TopMission } from "../stat
  * once, so there is nothing to memoize.
  *
  * The endpoint behind this page landed in Phase 9 —
- * `src/app/api/v1/platform-stats/route.ts` over `src/features/stats/stats.service.ts`.
+ * `src/app/api/v1/platform-stats/route.ts` over `src/features/stats/server/stats.service.ts`.
  * The error branch stays the honest fallback it always was: nothing here is
  * stubbed against fabricated numbers, so an admin whose fetch fails sees
  * "couldn't load", never invented stats.

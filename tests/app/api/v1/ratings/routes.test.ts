@@ -10,14 +10,14 @@ import type { Rating } from "@/features/ratings/rating.types";
  * `POST|GET /api/v1/ratings/mission/{missionId}` and
  * `GET /api/v1/ratings/user/{userId}`.
  *
- * Shaped like `src/app/api/v1/bids/routes.test.ts`: the rating service module
+ * Shaped like `tests/app/api/v1/bids/routes.test.ts`: the rating service module
  * is mocked and the exported handlers are called directly, so every assertion
  * here is about what the *web layer* contributes — the absence of a role gate,
  * the request validation, the status codes, and the `RatingResponse` /
  * `UserRatingsResponse` shapes the mapper produces. The backend has no
  * `RatingControllerTest` to mirror case-for-case (its rating test is the
  * Mockito `RatingServiceTest`, mirrored in
- * `src/features/ratings/rating.service.test.ts`), so the cases below are
+ * `tests/features/ratings/server/rating.service.test.ts`), so the cases below are
  * derived from `RatingController`'s annotations plus the service errors it
  * lets through.
  *
@@ -38,7 +38,7 @@ import type { Rating } from "@/features/ratings/rating.types";
  * All three paths are authenticated-only — none are in `src/middleware.ts`'s
  * `PUBLIC_PATHS` — so the anonymous cases call `middleware()` directly, the
  * layer that actually rejects them in the deployed app (the precedent set by
- * `src/app/api/v1/notifications/routes.test.ts`), while the authenticated
+ * `tests/app/api/v1/notifications/routes.test.ts`), while the authenticated
  * cases pass the `x-user-id`/`x-user-role` headers `middleware.ts` would have
  * attached from the verified token's claims.
  *

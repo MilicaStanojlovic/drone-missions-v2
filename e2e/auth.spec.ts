@@ -7,8 +7,8 @@ import { expect, test, type Page } from "@playwright/test";
  * `/api/v1/**` routes) against the local Postgres started by
  * `docker compose up db` (see `MIGRATION_PLAN.md` §8) — skipped, with a
  * visible reason, whenever `DATABASE_URL` isn't configured, mirroring the
- * `hasDb` convention in `src/lib/audit.test.ts` /
- * `src/app/api/v1/auth/routes.test.ts` and `GET /api/health`'s own
+ * `hasDb` convention in `tests/lib/audit.test.ts` /
+ * `tests/app/api/v1/auth/routes.test.ts` and `GET /api/health`'s own
  * `not_configured` branch. `playwright.config.ts` forwards `DATABASE_URL`
  * from `.env.local`/`.env` (or a real CI secret) into `process.env` for this
  * file to read, the same way `vitest.config.ts` already does for the
@@ -58,6 +58,25 @@ test.describe("Phase 1 auth happy path (live DB)", () => {
   /** Reads the JWT `auth.client.ts` stores under `dm_token`. */
   function readToken(page: Page): Promise<string | null> {
     return page.evaluate(() => window.localStorage.getItem("dm_token"));
+  }
+
+  /**
+   * Signs in through the real form and waits for the role home the landing
+   * page redirects to. Matches the local `signIn` helper the other specs
+   * carry (`ratings.spec.ts`, `missions.spec.ts`, `admin.spec.ts`, …); the
+   * two tests that assert the login flow itself keep their steps inline,
+   * since there the login IS the subject rather than setup.
+   */
+  async function signIn(
+    page: Page,
+    account: { email: string; password: string },
+    home: RegExp,
+  ): Promise<void> {
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(account.email);
+    await page.getByLabel("Password").fill(account.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(home);
   }
 
   test("register a DESIGNER via the query-prefilled role radio, land on /login?registered=1", async ({
@@ -163,31 +182,21 @@ test.describe("Phase 1 auth happy path (live DB)", () => {
   });
 
   test("clicking the topbar profile chip opens My Profile", async ({ page }) => {
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(designer.email);
-    await page.getByLabel("Password").fill(designer.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/missions\/mine$/);
+    await signIn(page, designer, /\/missions\/mine$/);
 
     // The chip is the source's `nav__chip` — an anchor onto /profile,
-    // `title="View your profile"` (components/app-shell/topbar.tsx).
+    // `title="View your profile"` (components/app-shell/topbar.tsx). What the
+    // profile page itself renders is covered by ratings.spec.ts; this test
+    // only claims the chip navigates there.
     await page.getByTitle("View your profile").click();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(page.getByRole("heading", { name: "My Profile" })).toBeVisible();
-
-    // The identity card renders the account the chip belongs to.
-    await expect(page.getByText(designer.email, { exact: true })).toBeVisible();
-    await expect(page.getByText("Member since", { exact: true })).toBeVisible();
   });
 
   test("logging out via the topbar button clears the session and returns to /login", async ({
     page,
   }) => {
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(designer.email);
-    await page.getByLabel("Password").fill(designer.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/missions\/mine$/);
+    await signIn(page, designer, /\/missions\/mine$/);
 
     const token = await readToken(page);
     expect(token).toBeTruthy();

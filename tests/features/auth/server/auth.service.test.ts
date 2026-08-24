@@ -19,7 +19,7 @@ import type { NewUser, User } from "@/features/users/user.types";
  * asserting on the captured entry here proves `auth.service.ts` builds the
  * right audit shape, not just that it calls `record()` at all.
  *
- * Live-DB coverage of `record()` itself lives in `src/lib/audit.test.ts`.
+ * Live-DB coverage of `record()` itself lives in `tests/lib/audit.test.ts`.
  *
  * SOURCE: drone-missions-backend/.../business/service/auth/AuthServiceTest.java
  */

@@ -45,12 +45,14 @@ the BEHAVIOR reference. Never invent ad-hoc colors/spacing when the canvas defin
   holds the React UI. Shared core in `src/db/` and `src/lib/`.
 - Layering mirrors Spring: route handler = controller, `server/*.service.ts` = `@Service`,
   `server/*.queries.ts` = repository/DAO. Services never touch HTTP types; handlers never touch the DB.
-- `import 'server-only'` at the top of every service/query/db module — if a module has it, it
-  belongs in `server/`. No barrel `index.ts` in `features/*`.
+- `import 'server-only'` at the top of every service/query/db module. Placement follows the
+  module's *runtime*: server-side runtime → `server/`; imported by client code → feature root
+  (some `*.types.ts` carry the marker for their runtime exports yet live at the root because
+  components import them with `import type`, which erases). No barrel `index.ts` in `features/*`.
 - Tests live in the top-level `tests/` tree mirroring `src/` (`tests/features/<f>/server/…`,
   `tests/app/api/…`, `tests/lib/…`), never beside the module. Vitest only collects `tests/**`.
-- Imports: use the `@/…` alias for every cross-file import; only files under
-  `features/<f>/components/` use relative imports (`../mission.client`).
+- Imports: `@/…` alias for anything crossing a directory boundary; relative only between
+  same-directory siblings (`./schema`, `../mission.client` from `components/`).
 - Validation: Zod schemas (one per request DTO), base shapes via `drizzle-zod`, cross-field rules
   via `.superRefine()`. Mirror every Jakarta Bean Validation rule and custom validator from the source.
 - Errors: throw `AppError` subclasses from `src/lib/errors.ts` (`NotFoundError`→404,

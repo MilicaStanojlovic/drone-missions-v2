@@ -16,7 +16,7 @@ import { createElement } from "react";
  *  - `resend` — so nothing leaves the machine and each case can drive the
  *    outcome (`{ error }`, a thrown network fault, or success).
  *  - `@/lib/env` — a plain mutable object, the same pattern
- *    `src/app/api/health/route.test.ts` uses, so a case can flip
+ *    `tests/app/api/health/route.test.ts` uses, so a case can flip
  *    `MAIL_ENABLED` / `MAIL_REDIRECT_TO` between runs. `env` is a
  *    parsed-once singleton in the real module, so it cannot be re-read per
  *    test any other way.

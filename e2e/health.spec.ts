@@ -10,7 +10,7 @@ import { expect, test } from "@playwright/test";
  * health probe added in this phase (see `src/app/api/health/route.ts`).
  *
  * The DB-connected variant (`db: "up"`) is exercised by the route's own
- * Vitest suite (`src/app/api/health/route.test.ts`) against a mocked pool;
+ * Vitest suite (`tests/app/api/health/route.test.ts`) against a mocked pool;
  * here it stays "skipped — no DB configured" per the plan, since this repo
  * has no live Supabase/Postgres instance to boot against.
  */

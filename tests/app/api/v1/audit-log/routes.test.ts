@@ -15,7 +15,7 @@ import type { AuditLog } from "@/features/audit/audit.types";
  * the mapper produces, and the authorization it enforces. Same shape as the
  * neighbouring `users/routes.test.ts` and `missions/routes.test.ts`; the
  * service's own behavior (the `q` normalisation) has its suite in
- * `src/features/audit/audit.service.test.ts`.
+ * `tests/features/audit/server/audit.service.test.ts`.
  *
  * The mapper is deliberately **not** mocked, exactly as the Java test passes a
  * real `new AuditLogMapper()` into the controller — the mapping is part of what
@@ -31,7 +31,7 @@ import type { AuditLog } from "@/features/audit/audit.types";
  *
  * The same endpoint reading a trail that other endpoints really wrote — the
  * half a stubbed service cannot show — is in `routes.live.test.ts` beside this
- * file, over the SQL rules pinned in `src/features/audit/audit.queries.test.ts`.
+ * file, over the SQL rules pinned in `tests/features/audit/server/audit.queries.test.ts`.
  *
  * SOURCE:
  * - drone-missions-backend/.../web/controller/audit/AuditLogController.java

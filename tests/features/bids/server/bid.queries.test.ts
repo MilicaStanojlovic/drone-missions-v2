@@ -26,7 +26,7 @@ import * as queries from "@/features/bids/server/bid.queries";
  * `bid.service.test.ts` stubs this module out entirely, so none of the above
  * is proven there. It is checked here instead, against the local Postgres that
  * `docker compose up db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8),
- * following the shape of `src/features/missions/mission.queries.test.ts`.
+ * following the shape of `tests/features/missions/server/mission.queries.test.ts`.
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
  * `vitest.config.ts` forwards the variable from `.env.local`/`.env`.
@@ -34,7 +34,7 @@ import * as queries from "@/features/bids/server/bid.queries";
  * Every row this suite writes is owned by users it created for this run, and
  * every assertion is scoped to those ids, so it is deterministic against a
  * database that already holds other bids (including a concurrently running
- * `src/app/api/v1/bids/routes.live.test.ts`).
+ * `tests/app/api/v1/bids/routes.live.test.ts`).
  *
  * There is no Spring counterpart to mirror: the backend has no repository-level
  * integration test. Each case names the source rule it pins instead.

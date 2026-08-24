@@ -38,7 +38,7 @@ import postgres from "postgres";
  * The phase's other "done when" — an email renders and is logged instead of
  * sent while `MAIL_ENABLED=false` — is not observable through the browser
  * (nothing in this phase's UI triggers a send; Phase 5's bid/lifecycle
- * transitions do). It is covered by `src/lib/email/email.service.test.ts`,
+ * transitions do). It is covered by `tests/lib/email/email.service.test.ts`,
  * which renders each template and asserts the `[mail disabled] would send
  * to=... subject=...` pino line carries the rendered HTML.
  */

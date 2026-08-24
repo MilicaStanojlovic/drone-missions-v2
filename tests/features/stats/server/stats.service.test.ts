@@ -34,7 +34,7 @@ import type { MissionDao } from "@/features/missions/server/mission.cache";
  * What this suite cannot show is whether the SQL under those mocks counts the
  * right rows: that is `bid.queries.test.ts` / `user.queries.test.ts` /
  * `mission.queries.test.ts` (live-DB), and end-to-end
- * `src/app/api/v1/platform-stats/routes.live.test.ts`. The division is the same
+ * `tests/app/api/v1/platform-stats/routes.live.test.ts`. The division is the same
  * one `user.service.test.ts` documents.
  *
  * SOURCE:

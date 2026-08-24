@@ -50,12 +50,14 @@ weakened behavior is a finding even if the new code "works":
 - **Flyway migrations are copied verbatim** — any edit to a `V*__*.sql` file relative to the
   backend's `src/main/resources/db/migration` is a blocking finding. `src/db/schema.ts` must
   mirror the migrated schema (no invented columns/tables).
-- **Structure** — `src/app/` routing-only, thin handlers; domain logic in
-  `features/<f>/server/` (service/queries/schema/mapper); `import 'server-only'` present on every
-  service/query/db module, and every such module sits under `server/` (types/client/isomorphic
-  helpers stay at the feature root); Vitest suites under `tests/` mirroring `src/`, never beside
-  the module; `@/…` alias for cross-file imports (relative only inside `components/`); no barrel
-  `index.ts` under `features/*`; services free of HTTP/Next types.
+- **Structure** — `MIGRATION_PLAN.md` §4 is normative; read it before flagging layout. Check:
+  `src/app/` routing-only with thin handlers; domain logic in `features/<f>/server/`
+  (service/queries/schema/mapper); `import 'server-only'` present on every service/query/db
+  module, and no server-runtime module left outside `server/` (types/client/isomorphic helpers
+  belong at the feature root — a `server-only` marker on a `*.types.ts` is not by itself a
+  misplacement); Vitest suites under `tests/` mirroring `src/`, never beside the module;
+  `@/…` for imports crossing a directory (relative between same-directory siblings is fine);
+  no barrel `index.ts` under `features/*`; services free of HTTP/Next types.
 - **Write-boundary** — the diff must contain NO change under the two source repos. Check
   `git -C <source repo> status` for both; any dirt there is a blocking finding.
 - **Secrets** — any literal-looking credential, SMTP password, API key, or real connection string

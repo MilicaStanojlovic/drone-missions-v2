@@ -14,7 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * Live-DB only, skipped with a visible reason when `DATABASE_URL` isn't
  * configured — the same `hasDb` convention as `e2e/auth.spec.ts`,
- * `src/lib/audit.test.ts` and `src/app/api/v1/missions/routes.test.ts`.
+ * `tests/lib/audit.test.ts` and `tests/app/api/v1/missions/routes.test.ts`.
  * `playwright.config.ts` forwards `DATABASE_URL` from `.env.local`/`.env`
  * (or a real CI secret) into `process.env` for this file to read.
  *

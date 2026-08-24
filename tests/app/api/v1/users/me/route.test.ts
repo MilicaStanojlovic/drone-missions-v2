@@ -12,7 +12,7 @@ import { GET as meRoute } from "@/app/api/v1/users/me/route";
 /**
  * Route-level integration suite for `GET /api/v1/users/me`.
  *
- * Live-DB only, mirroring `src/app/api/v1/auth/routes.test.ts`: exercises
+ * Live-DB only, mirroring `tests/app/api/v1/auth/routes.test.ts`: exercises
  * the real route handler against the local Postgres started by
  * `docker compose up db` — skipped, with a visible reason, when
  * `DATABASE_URL` isn't configured.

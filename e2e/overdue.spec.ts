@@ -31,7 +31,7 @@ import postgres from "postgres";
  * (`scripts/run-overdue-sweep.ts`, the same entry point the scheduler calls),
  * and the browser observes the result through the app. That the schedule
  * itself is the source's `0 9 * * *` in Europe/Belgrade, registered exactly
- * once, is covered by `src/lib/scheduler.test.ts`.
+ * once, is covered by `tests/lib/scheduler.test.ts`.
  *
  * ## Why the mission is nudged in SQL
  * A mission only becomes the sweep's business once it is AWARDED to a pilot

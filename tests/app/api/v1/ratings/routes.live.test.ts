@@ -40,7 +40,7 @@ import { GET as forUserRoute } from "@/app/api/v1/ratings/user/[userId]/route";
  * It lives in a separate file rather than in `routes.test.ts` because that
  * file's `vi.mock` of the rating service is module-scoped: a live-DB block
  * inside it would still be talking to the mocks. Same split as
- * `src/app/api/v1/bids/routes.live.test.ts`.
+ * `tests/app/api/v1/bids/routes.live.test.ts`.
  *
  * Fixtures are inserted directly rather than driven through the register /
  * mission / bid / accept / complete endpoints the way the bid suite builds

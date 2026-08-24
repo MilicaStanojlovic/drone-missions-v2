@@ -27,7 +27,7 @@ import type { Mission } from "@/features/missions/mission.types";
  * attached the `x-user-id`/`x-user-role` headers.
  *
  * That is deliberately *not* the live-DB shape of
- * `src/app/api/v1/auth/routes.test.ts`: the behaviors under test here are the
+ * `tests/app/api/v1/auth/routes.test.ts`: the behaviors under test here are the
  * controller's own, the service and DAO layers already have their own suites
  * (`mission.service.test.ts`, `mission.cache.test.ts`), and the end-to-end
  * path through a real database is covered by `e2e/missions.spec.ts`.
@@ -40,7 +40,7 @@ import type { Mission } from "@/features/missions/mission.types";
  * The 401 cases of the phase-7 admin endpoints go through `middleware()`
  * itself, the layer that actually rejects an anonymous caller in the deployed
  * app (none of these paths are in its `PUBLIC_PATHS`), following the precedent
- * of `src/app/api/v1/users/routes.test.ts`. The 403 cases call the handlers
+ * of `tests/app/api/v1/users/routes.test.ts`. The 403 cases call the handlers
  * with a verified non-admin's headers, since `requireRole()` is what stands in
  * for `@PreAuthorize("hasRole('ADMIN')")`.
  *

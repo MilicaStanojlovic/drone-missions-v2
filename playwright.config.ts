@@ -16,7 +16,7 @@ const E2E_JWT_SECRET = "e2e-playwright-fixture-secret-not-for-real-use-000000";
  * loader, third arg `""` because these vars aren't `VITE_`-prefixed), purely
  * so `e2e/auth.spec.ts` can read `process.env.DATABASE_URL` to decide
  * whether its live-DB suite should run — mirroring the `hasDb` convention in
- * `src/lib/audit.test.ts` / `src/app/api/v1/auth/routes.test.ts`.
+ * `tests/lib/audit.test.ts` / `tests/app/api/v1/auth/routes.test.ts`.
  *
  * `next dev` (spawned below as `webServer`) already loads `.env.local` on
  * its own, in its own process, regardless of this — that's what lets the app

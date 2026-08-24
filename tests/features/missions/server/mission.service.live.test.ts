@@ -13,7 +13,7 @@ import type { BidWrite } from "@/features/bids/server/bid.queries";
  * database untouched. Whether the port really is atomic is a property of a
  * *real* Postgres transaction, so it is checked here — the same live-DB shape
  * `mission.queries.test.ts` uses, and the counterpart of
- * `src/features/bids/bid.service.live.test.ts`, which does this for `accept`.
+ * `tests/features/bids/server/bid.service.live.test.ts`, which does this for `accept`.
  *
  * ## The injected failing step
  * Every write `cancel` makes is valid by construction (that is what the guards

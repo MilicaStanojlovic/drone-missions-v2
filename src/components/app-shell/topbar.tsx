@@ -37,6 +37,17 @@ const NAV_LINK_RESTING = "text-[#5c6b7a] hover:bg-[#f0f3f7] hover:text-foregroun
 const NAV_LINK_ACTIVE = "text-primary bg-[#eef3ff]";
 
 /**
+ * The account chip — the source's separate `nav__chip` rule, not `nav__link`:
+ * a pill that swaps its BORDER colour when active, leaving background and text
+ * alone. Hover colours are the source CSS's literals; the resting border keeps
+ * this port's token.
+ */
+const CHIP =
+  "bg-secondary/40 flex items-center gap-2 rounded-full border py-1 pr-3.5 pl-2.5 no-underline transition-colors";
+const CHIP_RESTING = "border-border hover:border-[#c3ccd6] hover:bg-[#eef2f6]";
+const CHIP_ACTIVE = "border-primary";
+
+/**
  * The admin section nav, in the source's order. Kept as data rather than four
  * hand-written `<Link>`s because every entry differs only in href and label —
  * the four `@if (auth.isAdmin)` anchors of `app.component.html`.
@@ -76,6 +87,13 @@ export function Topbar({ username, role }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
 
+  /**
+   * Ports `routerLinkActive`: none of the source's topbar links carry the
+   * `exact` option, so every one of them is a prefix match — which is also
+   * what keeps "Users" lit on `/admin/users/new`.
+   */
+  const isActive = (href: string) => pathname.startsWith(href);
+
   async function handleLogout() {
     try {
       await apiFetch("/api/v1/auth/logout", { method: "POST" });
@@ -101,16 +119,14 @@ export function Topbar({ username, role }: TopbarProps) {
             {/* Pilots only, exactly as the source's `@if (auth.isPilot)` gates
                 it. Labelled "My Bids" after the shipped header, not the
                 canvas's "My Bids & Jobs": the jobs half of that mock never
-                existed in the app, and the route is the bid history alone.
-                `routerLinkActive` (no `exact` option on this link) is a prefix
-                match, hence `startsWith`. */}
+                existed in the app, and the route is the bid history alone. */}
             {role === "PILOT" && (
               <>
                 <Link
                   href="/my-bids"
                   className={cn(
                     NAV_LINK,
-                    pathname.startsWith("/my-bids") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                    isActive("/my-bids") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
                   )}
                 >
                   My Bids
@@ -124,7 +140,7 @@ export function Topbar({ username, role }: TopbarProps) {
                   href="/my-jobs"
                   className={cn(
                     NAV_LINK,
-                    pathname.startsWith("/my-jobs") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
+                    isActive("/my-jobs") ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
                   )}
                 >
                   My Jobs
@@ -138,21 +154,13 @@ export function Topbar({ username, role }: TopbarProps) {
                 Log", not the canvas's "Audit log"). This row IS the admin
                 section nav in both ground truths: no admin page renders a nav
                 of its own, so `(app)/admin/layout.tsx` deliberately adds none
-                (see its note). `routerLinkActive` carries no `exact` option on
-                any of these links, hence `startsWith` — which is what keeps
-                "Users" lit on `/admin/users/new` too. Only `/admin/overview`
-                exists as of this task; `missions`, `users` and `audit-log`
-                are the next two tasks of this same phase, and the topbar is
-                this task's to edit. */}
+                (see its note). */}
             {role === "ADMIN" &&
               ADMIN_NAV.map(({ href, label }) => (
                 <Link
                   key={href}
                   href={href}
-                  className={cn(
-                    NAV_LINK,
-                    pathname.startsWith(href) ? NAV_LINK_ACTIVE : NAV_LINK_RESTING,
-                  )}
+                  className={cn(NAV_LINK, isActive(href) ? NAV_LINK_ACTIVE : NAV_LINK_RESTING)}
                 >
                   {label}
                 </Link>
@@ -166,20 +174,11 @@ export function Topbar({ username, role }: TopbarProps) {
               same slot: immediately before the profile chip. Designers and
               admins are never notified, so they get no bell. */}
           {role === "PILOT" && <NotificationBell />}
-          {/* The source's `nav__chip`: an anchor onto /profile with hover
-              styles and a `nav__chip--active` blue border while the profile
-              route is active (`routerLinkActive`, prefix match, hence
-              `startsWith`). Hover colours are the source CSS's literals;
-              resting look keeps this port's token-based chip style. */}
+          {/* The source's `nav__chip` — an anchor onto /profile (see CHIP). */}
           <Link
             href="/profile"
             title="View your profile"
-            className={cn(
-              "bg-secondary/40 flex items-center gap-2 rounded-full border py-1 pr-3.5 pl-2.5 no-underline transition-colors",
-              pathname.startsWith("/profile")
-                ? "border-primary"
-                : "border-border hover:border-[#c3ccd6] hover:bg-[#eef2f6]",
-            )}
+            className={cn(CHIP, isActive("/profile") ? CHIP_ACTIVE : CHIP_RESTING)}
           >
             <span aria-hidden="true" className={cn("h-2 w-2 rounded-full", ROLE_DOT_CLASS[role])} />
             <span className="leading-tight">

@@ -49,7 +49,7 @@ import { POST as acceptRoute } from "@/app/api/v1/bids/[id]/accept/route";
  * It lives in a separate file rather than in `routes.test.ts` because that
  * file's `vi.mock` of the bid service is module-scoped: a live-DB block inside
  * it would still be talking to the mocks. This is the same split
- * `src/app/api/v1/missions/routes.live.test.ts` makes.
+ * `tests/app/api/v1/missions/routes.live.test.ts` makes.
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
  * `vitest.config.ts` forwards the variable from `.env.local`/`.env`.
