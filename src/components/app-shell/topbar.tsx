@@ -56,8 +56,9 @@ export interface TopbarProps {
 
 /**
  * Authenticated app shell topbar (replaces `AppComponent`'s `<header class="nav">`
- * and its `logout()` method): brand mark, profile chip (username + role), and a
- * logout button, plus the `nav__links` row. Each role-specific link is added
+ * and its `logout()` method): brand mark, profile chip (username + role — the
+ * source's `nav__chip` link onto `/profile`), and a logout button, plus the
+ * `nav__links` row. Each role-specific link is added
  * by the phase that introduces its route, so the row currently holds the
  * pilot's "My Bids" (Phase 3) and "My Jobs" (Phase 5) plus the admin section's
  * four links (Phase 7); "My Missions" / "New Mission" / "Browse" arrive with
@@ -165,9 +166,20 @@ export function Topbar({ username, role }: TopbarProps) {
               same slot: immediately before the profile chip. Designers and
               admins are never notified, so they get no bell. */}
           {role === "PILOT" && <NotificationBell />}
-          <span
-            className="border-border bg-secondary/40 flex items-center gap-2 rounded-full border py-1 pr-3.5 pl-2.5"
-            title="Your account"
+          {/* The source's `nav__chip`: an anchor onto /profile with hover
+              styles and a `nav__chip--active` blue border while the profile
+              route is active (`routerLinkActive`, prefix match, hence
+              `startsWith`). Hover colours are the source CSS's literals;
+              resting look keeps this port's token-based chip style. */}
+          <Link
+            href="/profile"
+            title="View your profile"
+            className={cn(
+              "bg-secondary/40 flex items-center gap-2 rounded-full border py-1 pr-3.5 pl-2.5 no-underline transition-colors",
+              pathname.startsWith("/profile")
+                ? "border-primary"
+                : "border-border hover:border-[#c3ccd6] hover:bg-[#eef2f6]",
+            )}
           >
             <span aria-hidden="true" className={cn("h-2 w-2 rounded-full", ROLE_DOT_CLASS[role])} />
             <span className="leading-tight">
@@ -178,7 +190,7 @@ export function Topbar({ username, role }: TopbarProps) {
                 {ROLE_LABEL[role]}
               </span>
             </span>
-          </span>
+          </Link>
           <button
             type="button"
             onClick={handleLogout}

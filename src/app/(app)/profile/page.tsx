@@ -15,8 +15,8 @@ export const metadata: Metadata = {
  *
  * No `Suspense` boundary: nothing below reads `useSearchParams`.
  *
- * The page is reachable by URL only — the topbar deliberately gets no link to
- * it in this phase.
+ * Reached through the topbar's profile chip — the source's `nav__chip` link
+ * (`app.component.html`) — or by URL directly.
  *
  * SOURCE: drone-missions-frontend/.../app.routes.ts (`profile`)
  */

@@ -162,6 +162,24 @@ test.describe("Phase 1 auth happy path (live DB)", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test("clicking the topbar profile chip opens My Profile", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(designer.email);
+    await page.getByLabel("Password").fill(designer.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/missions\/mine$/);
+
+    // The chip is the source's `nav__chip` — an anchor onto /profile,
+    // `title="View your profile"` (components/app-shell/topbar.tsx).
+    await page.getByTitle("View your profile").click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page.getByRole("heading", { name: "My Profile" })).toBeVisible();
+
+    // The identity card renders the account the chip belongs to.
+    await expect(page.getByText(designer.email, { exact: true })).toBeVisible();
+    await expect(page.getByText("Member since", { exact: true })).toBeVisible();
+  });
+
   test("logging out via the topbar button clears the session and returns to /login", async ({
     page,
   }) => {
