@@ -50,8 +50,11 @@ weakened behavior is a finding even if the new code "works":
 - **Flyway migrations are copied verbatim** — any edit to a `V*__*.sql` file relative to the
   backend's `src/main/resources/db/migration` is a blocking finding. `src/db/schema.ts` must
   mirror the migrated schema (no invented columns/tables).
-- **Structure** — `src/app/` routing-only, thin handlers; domain logic in `features/<f>/`
-  service/queries; `import 'server-only'` present on every service/query/db module; no barrel
+- **Structure** — `src/app/` routing-only, thin handlers; domain logic in
+  `features/<f>/server/` (service/queries/schema/mapper); `import 'server-only'` present on every
+  service/query/db module, and every such module sits under `server/` (types/client/isomorphic
+  helpers stay at the feature root); Vitest suites under `tests/` mirroring `src/`, never beside
+  the module; `@/…` alias for cross-file imports (relative only inside `components/`); no barrel
   `index.ts` under `features/*`; services free of HTTP/Next types.
 - **Write-boundary** — the diff must contain NO change under the two source repos. Check
   `git -C <source repo> status` for both; any dirt there is a blocking finding.

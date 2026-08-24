@@ -38,11 +38,19 @@ the BEHAVIOR reference. Never invent ad-hoc colors/spacing when the canvas defin
 ## Target conventions (from MIGRATION_PLAN.md — read it if unsure)
 
 - Hybrid structure: `src/app/` is ROUTING ONLY (thin handlers: parse → validate → service →
-  shape); domain code lives in `src/features/<feature>/` as `*.service.ts`, `*.queries.ts`,
-  `*.schema.ts`, `*.mapper.ts`, `*.types.ts`, `components/`. Shared core in `src/db/` and `src/lib/`.
-- Layering mirrors Spring: route handler = controller, `*.service.ts` = `@Service`,
-  `*.queries.ts` = repository/DAO. Services never touch HTTP types; handlers never touch the DB.
-- `import 'server-only'` at the top of every service/query/db module. No barrel `index.ts` in `features/*`.
+  shape); domain code lives in `src/features/<feature>/`, split by the server/client boundary:
+  `server/` holds `*.service.ts`, `*.queries.ts`, `*.schema.ts`, `*.mapper.ts` (and any other
+  `server-only` module, e.g. `mission.cache.ts`, `overdue-sweep.ts`); the feature root holds
+  `*.types.ts`, `*.client.ts` and isomorphic helpers that client code may import; `components/`
+  holds the React UI. Shared core in `src/db/` and `src/lib/`.
+- Layering mirrors Spring: route handler = controller, `server/*.service.ts` = `@Service`,
+  `server/*.queries.ts` = repository/DAO. Services never touch HTTP types; handlers never touch the DB.
+- `import 'server-only'` at the top of every service/query/db module — if a module has it, it
+  belongs in `server/`. No barrel `index.ts` in `features/*`.
+- Tests live in the top-level `tests/` tree mirroring `src/` (`tests/features/<f>/server/…`,
+  `tests/app/api/…`, `tests/lib/…`), never beside the module. Vitest only collects `tests/**`.
+- Imports: use the `@/…` alias for every cross-file import; only files under
+  `features/<f>/components/` use relative imports (`../mission.client`).
 - Validation: Zod schemas (one per request DTO), base shapes via `drizzle-zod`, cross-field rules
   via `.superRefine()`. Mirror every Jakarta Bean Validation rule and custom validator from the source.
 - Errors: throw `AppError` subclasses from `src/lib/errors.ts` (`NotFoundError`→404,
