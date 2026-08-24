@@ -5,7 +5,7 @@ import {
   RoleNotAllowedError,
   USER_ID_HEADER,
   USER_ROLE_HEADER,
-} from "./guards";
+} from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/errors";
 
 /**

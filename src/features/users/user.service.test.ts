@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MissionDao } from "@/features/missions/mission.cache";
 import type { Page, PageRequest } from "@/lib/api/paging";
 import type { NewAuditEntry } from "@/lib/audit";
-import type { User } from "./user.types";
-import { UserNotFoundError } from "./user.queries";
+import type { User } from "@/features/users/user.types";
+import { UserNotFoundError } from "@/features/users/user.queries";
 
 /**
  * Vitest suite for `user.service.ts`.
@@ -71,8 +71,8 @@ import { UserNotFoundError } from "./user.queries";
 const findByIdMock = vi.fn();
 const searchMock = vi.fn();
 const setSuspendedMock = vi.fn();
-vi.mock("./user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./user.queries")>();
+vi.mock("@/features/users/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
   return {
     ...actual,
     findById: (...args: unknown[]) => findByIdMock(...args),
@@ -116,7 +116,7 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 
 // `vi.mock` calls above are hoisted by Vitest, so these static imports already
 // resolve against the mocked modules.
-import { AdminCannotBeSuspendedError, findById, reactivate, search, suspend } from "./user.service";
+import { AdminCannotBeSuspendedError, findById, reactivate, search, suspend } from "@/features/users/user.service";
 
 /**
  * The Java test's `user(role, suspended)` helper: id 3, username "pilot-mira".

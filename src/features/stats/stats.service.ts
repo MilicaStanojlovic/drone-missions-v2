@@ -7,7 +7,7 @@ import {
   countByRoleAndSuspendedFalse,
   countBySuspendedTrue,
 } from "@/features/users/user.queries";
-import type { PlatformStats, TopMission } from "./stats.types";
+import type { PlatformStats, TopMission } from "@/features/stats/stats.types";
 
 /**
  * Platform statistics service (replaces

@@ -4,8 +4,8 @@ import type { UserRole } from "@/db/schema";
 import type { Page, PageRequest } from "@/lib/api/paging";
 import { record, userReactivated, userSuspended } from "@/lib/audit";
 import { ConflictError, ForbiddenError } from "@/lib/errors";
-import { findById as findUserById, search as searchUsers, setSuspended } from "./user.queries";
-import type { User } from "./user.types";
+import { findById as findUserById, search as searchUsers, setSuspended } from "@/features/users/user.queries";
+import type { User } from "@/features/users/user.types";
 
 /**
  * User lookup and moderation service (replaces `business.service.user.UserService`).

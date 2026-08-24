@@ -5,20 +5,20 @@ import { auditLog, bid, mission, notification, rating, users } from "@/db/schema
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import type { UserRole } from "@/db/schema";
 import { getMissionDao } from "@/features/missions/mission.cache";
-import { POST as registerRoute } from "../auth/register/route";
-import { POST as placeBidRoute } from "../bids/mission/[missionId]/route";
-import { POST as acceptBidRoute } from "../bids/[id]/accept/route";
-import { GET as feedRoute, POST as createRoute } from "./route";
-import { GET as adminListRoute } from "./all/route";
-import { POST as hideRoute } from "./[id]/hide/route";
-import { POST as unhideRoute } from "./[id]/unhide/route";
-import { POST as removeRoute } from "./[id]/remove/route";
-import { GET as myMissionsRoute } from "./my-missions/route";
-import { GET as myJobsRoute } from "./my-jobs/route";
-import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
-import { POST as startRoute } from "./[id]/start/route";
-import { POST as completeRoute } from "./[id]/complete/route";
-import { POST as cancelRoute } from "./[id]/cancel/route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { POST as placeBidRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
+import { POST as acceptBidRoute } from "@/app/api/v1/bids/[id]/accept/route";
+import { GET as feedRoute, POST as createRoute } from "@/app/api/v1/missions/route";
+import { GET as adminListRoute } from "@/app/api/v1/missions/all/route";
+import { POST as hideRoute } from "@/app/api/v1/missions/[id]/hide/route";
+import { POST as unhideRoute } from "@/app/api/v1/missions/[id]/unhide/route";
+import { POST as removeRoute } from "@/app/api/v1/missions/[id]/remove/route";
+import { GET as myMissionsRoute } from "@/app/api/v1/missions/my-missions/route";
+import { GET as myJobsRoute } from "@/app/api/v1/missions/my-jobs/route";
+import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "@/app/api/v1/missions/[id]/route";
+import { POST as startRoute } from "@/app/api/v1/missions/[id]/start/route";
+import { POST as completeRoute } from "@/app/api/v1/missions/[id]/complete/route";
+import { POST as cancelRoute } from "@/app/api/v1/missions/[id]/cancel/route";
 
 /**
  * Route-level **integration** suite for the phase-2 mission endpoints: the

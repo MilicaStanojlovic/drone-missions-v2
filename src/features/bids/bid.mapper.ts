@@ -1,5 +1,5 @@
 import "server-only";
-import type { Bid, BidResponse } from "./bid.types";
+import type { Bid, BidResponse } from "@/features/bids/bid.types";
 
 /**
  * Bid DTO mapping (replaces `web.mapper.bid.BidMapper`).

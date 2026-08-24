@@ -65,9 +65,9 @@ vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, bid, mission, notification, users } from "@/db/schema";
 import * as bidQueries from "@/features/bids/bid.queries";
-import { getMissionDao } from "./mission.cache";
-import * as missionQueries from "./mission.queries";
-import { cancel } from "./mission.service";
+import { getMissionDao } from "@/features/missions/mission.cache";
+import * as missionQueries from "@/features/missions/mission.queries";
+import { cancel } from "@/features/missions/mission.service";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

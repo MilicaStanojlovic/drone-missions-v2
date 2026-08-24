@@ -69,15 +69,15 @@ import { BidRejectedEmail } from "@/emails/bid-rejected";
 import { MissionCancelledEmail } from "@/emails/mission-cancelled";
 import { MissionOverdueEmail } from "@/emails/mission-overdue";
 import { NewBidEmail } from "@/emails/new-bid";
-import { resetResendClient } from "./client";
+import { resetResendClient } from "@/lib/email/client";
 import {
   emailService,
   sendBidDecision,
   sendMissionCancelled,
   sendMissionOverdue,
   sendNewBid,
-} from "./email.service";
-import type { EmailMission, EmailRecipient } from "./email.types";
+} from "@/lib/email/email.service";
+import type { EmailMission, EmailRecipient } from "@/lib/email/email.types";
 
 /** Baseline env for a case that does not care — restored before every test. */
 const defaultEnv = {

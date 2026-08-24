@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { bid, mission, users, type BidStatus } from "@/db/schema";
-import * as queries from "./bid.queries";
+import * as queries from "@/features/bids/bid.queries";
 
 /**
  * Live-DB suite for the bid data-access layer.

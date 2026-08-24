@@ -63,10 +63,10 @@ import {
   MissionNotFoundError,
 } from "@/features/missions/mission.service";
 import { UserSuspendedError } from "@/features/users/user.service";
-import { GET as listRoute, POST as placeRoute } from "./mission/[missionId]/route";
-import { GET as myBidsRoute } from "./my/route";
-import { DELETE as withdrawRoute } from "./[id]/route";
-import { POST as acceptRoute } from "./[id]/accept/route";
+import { GET as listRoute, POST as placeRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
+import { GET as myBidsRoute } from "@/app/api/v1/bids/my/route";
+import { DELETE as withdrawRoute } from "@/app/api/v1/bids/[id]/route";
+import { POST as acceptRoute } from "@/app/api/v1/bids/[id]/accept/route";
 
 const PILOT_ID = 42;
 const DESIGNER_ID = 7;

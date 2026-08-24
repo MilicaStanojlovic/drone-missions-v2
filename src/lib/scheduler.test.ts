@@ -28,7 +28,7 @@ vi.mock("@/features/notifications/overdue-sweep", () => ({
 
 // Hoisted `vi.mock` above, so this resolves against the mocked sweep.
 import { logger } from "@/lib/logger";
-import { OVERDUE_SWEEP_CRON, OVERDUE_SWEEP_ZONE, startScheduler, stopScheduler } from "./scheduler";
+import { OVERDUE_SWEEP_CRON, OVERDUE_SWEEP_ZONE, startScheduler, stopScheduler } from "@/lib/scheduler";
 
 /** The wall clock `zone` shows at `instant`, as `"YYYY-MM-DD HH:mm"`. */
 function wallClockIn(zone: string, instant: Date): string {

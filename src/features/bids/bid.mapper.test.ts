@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toBidResponse } from "./bid.mapper";
-import type { Bid } from "./bid.types";
+import { toBidResponse } from "@/features/bids/bid.mapper";
+import type { Bid } from "@/features/bids/bid.types";
 
 /**
  * Vitest suite for `bid.mapper.ts`.

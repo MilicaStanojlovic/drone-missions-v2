@@ -18,7 +18,7 @@ import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { mission, users, type MissionStatus } from "@/db/schema";
 import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
 import type { User } from "@/features/users/user.types";
-import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "./mission.types";
+import type { Geofence, Mission, MissionRow, MissionWrite, Waypoint } from "@/features/missions/mission.types";
 
 /**
  * The mission data-access layer (replaces `data.access.JpaMissionDao` + the

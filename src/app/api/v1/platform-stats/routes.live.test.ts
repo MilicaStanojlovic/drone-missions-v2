@@ -6,12 +6,12 @@ import { MISSION_STATUSES, USER_ROLES } from "@/db/schema";
 import type { MissionStatus, UserRole } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import type { PlatformStats } from "@/features/stats/stats.types";
-import { POST as registerRoute } from "../auth/register/route";
-import { POST as createMissionRoute } from "../missions/route";
-import { POST as hideRoute } from "../missions/[id]/hide/route";
-import { POST as placeBidRoute } from "../bids/mission/[missionId]/route";
-import { POST as suspendRoute } from "../users/[id]/suspend/route";
-import { GET as overviewRoute } from "./route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { POST as createMissionRoute } from "@/app/api/v1/missions/route";
+import { POST as hideRoute } from "@/app/api/v1/missions/[id]/hide/route";
+import { POST as placeBidRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
+import { POST as suspendRoute } from "@/app/api/v1/users/[id]/suspend/route";
+import { GET as overviewRoute } from "@/app/api/v1/platform-stats/route";
 
 /**
  * Route-level **integration** suite for `GET /api/v1/platform-stats`: the real

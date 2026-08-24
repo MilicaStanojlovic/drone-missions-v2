@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toPublicUserResponse, toUserResponse } from "./user.mapper";
-import type { User } from "./user.types";
+import { toPublicUserResponse, toUserResponse } from "@/features/users/user.mapper";
+import type { User } from "@/features/users/user.types";
 
 /**
  * Vitest suite for `user.mapper.ts` — DB-less coverage proving each mapper

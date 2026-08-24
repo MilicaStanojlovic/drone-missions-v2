@@ -4,8 +4,8 @@ import { ConflictError, ForbiddenError } from "@/lib/errors";
 import { getMissionDao } from "@/features/missions/mission.cache";
 import { MissionNotFoundError } from "@/features/missions/mission.service";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
-import * as queries from "./rating.queries";
-import type { Rating } from "./rating.types";
+import * as queries from "@/features/ratings/rating.queries";
+import type { Rating } from "@/features/ratings/rating.types";
 
 /**
  * Rating business logic (replaces the write/participant-read half of
@@ -261,4 +261,4 @@ async function getMissionOrThrow(missionId: number): Promise<Mission> {
  * target's "handlers never touch the DB" rule. In-feature callers keep using
  * `rating.queries.ts` directly.
  */
-export { summaryFor } from "./rating.queries";
+export { summaryFor } from "@/features/ratings/rating.queries";

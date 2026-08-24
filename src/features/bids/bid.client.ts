@@ -1,6 +1,6 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
-import type { BidResponse } from "./bid.types";
+import type { BidResponse } from "@/features/bids/bid.types";
 
 /**
  * Client-side bid access: the browser-facing mirror of the bids feature.

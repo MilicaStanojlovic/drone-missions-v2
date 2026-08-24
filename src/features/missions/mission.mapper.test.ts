@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/features/users/user.types";
 import type { RatingSummary } from "@/features/ratings/rating.queries";
-import type { Mission } from "./mission.types";
+import type { Mission } from "@/features/missions/mission.types";
 
 /**
  * Vitest suite for `mission.mapper.ts`.
@@ -34,7 +34,7 @@ vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
 });
 
 // `vi.mock` is hoisted, so these already resolve against the mock.
-import { loadMissionResponse, loadMissionResponses, toMissionResponse } from "./mission.mapper";
+import { loadMissionResponse, loadMissionResponses, toMissionResponse } from "@/features/missions/mission.mapper";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

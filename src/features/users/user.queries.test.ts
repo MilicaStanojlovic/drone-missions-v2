@@ -3,8 +3,8 @@ import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { USER_ROLES, users } from "@/db/schema";
 import type { UserRole } from "@/db/schema";
-import * as queries from "./user.queries";
-import { UserNotFoundError } from "./user.queries";
+import * as queries from "@/features/users/user.queries";
+import { UserNotFoundError } from "@/features/users/user.queries";
 
 /**
  * Live-DB suite for the user data-access layer.

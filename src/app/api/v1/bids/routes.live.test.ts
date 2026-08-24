@@ -6,13 +6,13 @@ import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import type { UserRole } from "@/db/schema";
-import { POST as registerRoute } from "../auth/register/route";
-import { POST as createMissionRoute } from "../missions/route";
-import { GET as missionDetailRoute } from "../missions/[id]/route";
-import { GET as listRoute, POST as placeRoute } from "./mission/[missionId]/route";
-import { GET as myBidsRoute } from "./my/route";
-import { DELETE as withdrawRoute } from "./[id]/route";
-import { POST as acceptRoute } from "./[id]/accept/route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { POST as createMissionRoute } from "@/app/api/v1/missions/route";
+import { GET as missionDetailRoute } from "@/app/api/v1/missions/[id]/route";
+import { GET as listRoute, POST as placeRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
+import { GET as myBidsRoute } from "@/app/api/v1/bids/my/route";
+import { DELETE as withdrawRoute } from "@/app/api/v1/bids/[id]/route";
+import { POST as acceptRoute } from "@/app/api/v1/bids/[id]/accept/route";
 
 /**
  * Route-level **integration** suite for the bid endpoints: the real handlers

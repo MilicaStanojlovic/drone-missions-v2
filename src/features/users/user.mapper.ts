@@ -1,5 +1,5 @@
 import "server-only";
-import type { PublicUserResponse, User, UserResponse } from "./user.types";
+import type { PublicUserResponse, User, UserResponse } from "@/features/users/user.types";
 
 /**
  * Entity -> response DTO mapping (replaces `web.mapper.user.UserMapper`).

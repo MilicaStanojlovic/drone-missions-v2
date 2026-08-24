@@ -68,7 +68,7 @@ import { closeDb, getDb } from "@/db/client";
 import { mission, notification, users } from "@/db/schema";
 import { emailService } from "@/lib/email/email.service";
 import { logger } from "@/lib/logger";
-import { runOverdueSweep } from "./overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

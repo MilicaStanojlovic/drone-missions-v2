@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { mission, rating, users } from "@/db/schema";
-import type { Rating } from "./rating.types";
+import type { Rating } from "@/features/ratings/rating.types";
 
 /**
  * The rating data-access layer (replaces `data.repository.RatingRepository`).

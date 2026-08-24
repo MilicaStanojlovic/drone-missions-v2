@@ -7,10 +7,10 @@ import { middleware } from "@/middleware";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import { insertUser } from "@/features/users/user.queries";
 import type { NotificationType, UserRole } from "@/db/schema";
-import { GET as listRoute } from "./route";
-import { GET as unreadCountRoute } from "./unread-count/route";
-import { POST as markReadRoute } from "./[id]/read/route";
-import { POST as markAllReadRoute } from "./read-all/route";
+import { GET as listRoute } from "@/app/api/v1/notifications/route";
+import { GET as unreadCountRoute } from "@/app/api/v1/notifications/unread-count/route";
+import { POST as markReadRoute } from "@/app/api/v1/notifications/[id]/read/route";
+import { POST as markAllReadRoute } from "@/app/api/v1/notifications/read-all/route";
 
 /**
  * Route-level integration suite for

@@ -2,7 +2,7 @@ import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
 import type { PagedModel } from "@/lib/api/paging";
 import type { UserRole } from "@/db/schema";
-import type { UserResponse } from "./user.types";
+import type { UserResponse } from "@/features/users/user.types";
 
 /**
  * Client-side user access: the browser-facing mirror of the users feature.

@@ -10,7 +10,7 @@ import {
   create,
   forMission,
   receivedBy,
-} from "./rating.service";
+} from "@/features/ratings/rating.service";
 
 /**
  * Live-DB round-trip for `rating.service.ts` — the half `rating.service.test.ts`

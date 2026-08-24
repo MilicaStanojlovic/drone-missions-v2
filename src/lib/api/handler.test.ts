@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { z, ZodError } from "zod";
-import { withErrorHandling } from "./handler";
+import { withErrorHandling } from "@/lib/api/handler";
 import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 

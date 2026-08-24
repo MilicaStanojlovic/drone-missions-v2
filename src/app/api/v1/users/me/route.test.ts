@@ -5,9 +5,9 @@ import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import { middleware } from "@/middleware";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
-import { POST as registerRoute } from "../../auth/register/route";
-import { POST as loginRoute } from "../../auth/login/route";
-import { GET as meRoute } from "./route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { POST as loginRoute } from "@/app/api/v1/auth/login/route";
+import { GET as meRoute } from "@/app/api/v1/users/me/route";
 
 /**
  * Route-level integration suite for `GET /api/v1/users/me`.

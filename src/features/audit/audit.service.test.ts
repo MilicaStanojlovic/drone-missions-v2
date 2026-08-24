@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Page, PageRequest } from "@/lib/api/paging";
-import type { AuditLog, AuditSearchFilters } from "./audit.types";
+import type { AuditLog, AuditSearchFilters } from "@/features/audit/audit.types";
 
 /**
  * Vitest suite for `audit.service.ts`.
@@ -29,13 +29,13 @@ import type { AuditLog, AuditSearchFilters } from "./audit.types";
  */
 
 const searchMock = vi.fn();
-vi.mock("./audit.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./audit.queries")>();
+vi.mock("@/features/audit/audit.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/audit/audit.queries")>();
   return { ...actual, search: (...args: unknown[]) => searchMock(...args) };
 });
 
 // `vi.mock` is hoisted, so this already resolves against the mocked module.
-import { search } from "./audit.service";
+import { search } from "@/features/audit/audit.service";
 
 /** `PageRequest.of(0, 20)` — the pageable the Java test threads through. */
 const pageable: PageRequest = { page: 0, size: 20 };

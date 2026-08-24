@@ -4,13 +4,13 @@ import { closeDb, getDb } from "@/db/client";
 import { auditLog, mission, users } from "@/db/schema";
 import type { UserRole } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
-import { POST as registerRoute } from "../auth/register/route";
-import { GET as feedRoute, POST as createMissionRoute } from "../missions/route";
-import { GET as listRoute } from "./route";
-import { GET as byIdRoute } from "./[id]/route";
-import { POST as createAdminRoute } from "./admins/route";
-import { POST as suspendRoute } from "./[id]/suspend/route";
-import { POST as reactivateRoute } from "./[id]/reactivate/route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { GET as feedRoute, POST as createMissionRoute } from "@/app/api/v1/missions/route";
+import { GET as listRoute } from "@/app/api/v1/users/route";
+import { GET as byIdRoute } from "@/app/api/v1/users/[id]/route";
+import { POST as createAdminRoute } from "@/app/api/v1/users/admins/route";
+import { POST as suspendRoute } from "@/app/api/v1/users/[id]/suspend/route";
+import { POST as reactivateRoute } from "@/app/api/v1/users/[id]/reactivate/route";
 
 /**
  * Route-level **integration** suite for the phase-7 admin user endpoints: the

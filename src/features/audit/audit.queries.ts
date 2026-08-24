@@ -3,7 +3,7 @@ import { and, count, desc, eq, like, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
-import type { AuditLog, AuditSearchFilters } from "./audit.types";
+import type { AuditLog, AuditSearchFilters } from "@/features/audit/audit.types";
 
 /**
  * Audit-log reads (replaces `data.repository.AuditLogRepository`).

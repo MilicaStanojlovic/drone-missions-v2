@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ratingRequestSchema } from "./rating.schema";
+import { ratingRequestSchema } from "@/features/ratings/rating.schema";
 
 /**
  * Vitest suite for `rating.schema.ts` — DB-less coverage of the two validation

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { geofenceSchema, missionRequestSchema, waypointSchema } from "./mission.schema";
-import type { WaypointAction } from "./mission.types";
+import { geofenceSchema, missionRequestSchema, waypointSchema } from "@/features/missions/mission.schema";
+import type { WaypointAction } from "@/features/missions/mission.types";
 
 /**
  * Vitest suite for `mission.schema.ts` — DB-less coverage of the flight-plan

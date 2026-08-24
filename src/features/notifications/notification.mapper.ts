@@ -1,5 +1,5 @@
 import "server-only";
-import type { Notification, NotificationResponse } from "./notification.types";
+import type { Notification, NotificationResponse } from "@/features/notifications/notification.types";
 
 /**
  * Entity -> response DTO mapping (replaces

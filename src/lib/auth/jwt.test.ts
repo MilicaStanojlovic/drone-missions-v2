@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SignJWT } from "jose";
-import { signJwt, verifyJwt, InvalidJwtError } from "./jwt";
+import { signJwt, verifyJwt, InvalidJwtError } from "@/lib/auth/jwt";
 import { env } from "@/lib/env";
 
 /**

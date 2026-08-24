@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { env, loadEnv } from "./env";
+import { env, loadEnv } from "@/lib/env";
 
 /** A 32+ byte JWT secret, valid for every test that isn't specifically
  * exercising the length rule. */

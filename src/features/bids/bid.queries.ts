@@ -2,7 +2,7 @@ import "server-only";
 import { and, count, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { dbFor, getDb, type DbHandle } from "@/db/client";
 import { bid, mission, users, type BidStatus } from "@/db/schema";
-import type { Bid } from "./bid.types";
+import type { Bid } from "@/features/bids/bid.types";
 
 /**
  * The bid data-access layer (replaces `data.repository.BidRepository`).

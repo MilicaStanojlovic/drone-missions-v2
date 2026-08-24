@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { SignJWT } from "jose";
-import { middleware, config } from "./middleware";
+import { middleware, config } from "@/middleware";
 import { signJwt } from "@/lib/auth/jwt";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import { env } from "@/lib/env";

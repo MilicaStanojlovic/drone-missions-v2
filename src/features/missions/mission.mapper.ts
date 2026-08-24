@@ -5,15 +5,15 @@ import {
   summaryOf,
   type RatingSummary,
 } from "@/features/ratings/rating.queries";
-import type { GeofenceInput, MissionRequestInput } from "./mission.schema";
-import type { MissionDraft } from "./mission.service";
+import type { GeofenceInput, MissionRequestInput } from "@/features/missions/mission.schema";
+import type { MissionDraft } from "@/features/missions/mission.service";
 import type {
   Geofence,
   Mission,
   MissionModeration,
   MissionStatus,
   Waypoint,
-} from "./mission.types";
+} from "@/features/missions/mission.types";
 
 /**
  * Mission DTO mapping (replaces `web.mapper.mission.MissionMapper` and the

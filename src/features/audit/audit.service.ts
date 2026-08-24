@@ -1,8 +1,8 @@
 import "server-only";
 import type { AuditAction, AuditActorRole } from "@/db/schema";
 import type { Page, PageRequest } from "@/lib/api/paging";
-import { search as searchEntries } from "./audit.queries";
-import type { AuditLog } from "./audit.types";
+import { search as searchEntries } from "@/features/audit/audit.queries";
+import type { AuditLog } from "@/features/audit/audit.types";
 
 /**
  * Audit read service (replaces the `search` half of

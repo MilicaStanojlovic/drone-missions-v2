@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { MISSION_STATUSES } from "@/db/schema";
-import { GEOFENCE_TYPES, WAYPOINT_ACTIONS } from "./mission.types";
+import { GEOFENCE_TYPES, WAYPOINT_ACTIONS } from "@/features/missions/mission.types";
 
 /**
  * Mission request validation — replaces the Jakarta Bean Validation

@@ -2,7 +2,7 @@ import "server-only";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { notification } from "@/db/schema";
-import type { NewNotification, Notification, NotificationType } from "./notification.types";
+import type { NewNotification, Notification, NotificationType } from "@/features/notifications/notification.types";
 
 /**
  * Notification persistence (replaces `data.repository.NotificationRepository`).

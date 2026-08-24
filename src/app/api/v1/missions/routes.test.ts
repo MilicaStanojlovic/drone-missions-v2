@@ -105,17 +105,17 @@ import {
 import { UserSuspendedError } from "@/features/users/user.service";
 import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
 import { middleware } from "@/middleware";
-import { GET as feedRoute, POST as createRoute } from "./route";
-import { GET as myMissionsRoute } from "./my-missions/route";
-import { GET as myJobsRoute } from "./my-jobs/route";
-import { GET as adminListRoute } from "./all/route";
-import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "./[id]/route";
-import { POST as startRoute } from "./[id]/start/route";
-import { POST as completeRoute } from "./[id]/complete/route";
-import { POST as cancelRoute } from "./[id]/cancel/route";
-import { POST as hideRoute } from "./[id]/hide/route";
-import { POST as unhideRoute } from "./[id]/unhide/route";
-import { POST as removeRoute } from "./[id]/remove/route";
+import { GET as feedRoute, POST as createRoute } from "@/app/api/v1/missions/route";
+import { GET as myMissionsRoute } from "@/app/api/v1/missions/my-missions/route";
+import { GET as myJobsRoute } from "@/app/api/v1/missions/my-jobs/route";
+import { GET as adminListRoute } from "@/app/api/v1/missions/all/route";
+import { DELETE as deleteRoute, GET as detailRoute, PUT as updateRoute } from "@/app/api/v1/missions/[id]/route";
+import { POST as startRoute } from "@/app/api/v1/missions/[id]/start/route";
+import { POST as completeRoute } from "@/app/api/v1/missions/[id]/complete/route";
+import { POST as cancelRoute } from "@/app/api/v1/missions/[id]/cancel/route";
+import { POST as hideRoute } from "@/app/api/v1/missions/[id]/hide/route";
+import { POST as unhideRoute } from "@/app/api/v1/missions/[id]/unhide/route";
+import { POST as removeRoute } from "@/app/api/v1/missions/[id]/remove/route";
 
 const DESIGNER_ID = 7;
 const PILOT_ID = 42;

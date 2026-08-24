@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TtlCache, formatCacheStats, type Clock } from "./cache";
+import { TtlCache, formatCacheStats, type Clock } from "@/lib/cache";
 
 /**
  * Vitest suite for `src/lib/cache.ts`, mirroring `TtlCacheTest` case-for-case.

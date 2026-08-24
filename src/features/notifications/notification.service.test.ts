@@ -11,8 +11,8 @@ import {
   markRead,
   overdueExists,
   unreadCount,
-} from "./notification.service";
-import { NewNotification, type NotificationType } from "./notification.types";
+} from "@/features/notifications/notification.service";
+import { NewNotification, type NotificationType } from "@/features/notifications/notification.types";
 
 /**
  * Live-DB suite for `notification.service.ts` (and, through it,

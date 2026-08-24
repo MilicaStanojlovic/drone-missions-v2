@@ -1,5 +1,5 @@
 import "server-only";
-import type { AuditLog, AuditLogResponse } from "./audit.types";
+import type { AuditLog, AuditLogResponse } from "@/features/audit/audit.types";
 
 /**
  * Entity -> response DTO mapping (replaces `web.mapper.audit.AuditLogMapper`).

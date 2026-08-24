@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { DbHandle } from "@/db/client";
-import type { BidWrite } from "./bid.queries";
+import type { BidWrite } from "@/features/bids/bid.queries";
 import type { MissionWrite } from "@/features/missions/mission.types";
 
 /**
@@ -52,8 +52,8 @@ const inject = vi.hoisted(() => ({
   afterMissionSave: null as null | ((input: MissionWrite, tx?: DbHandle) => Promise<void>),
 }));
 
-vi.mock("./bid.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bid.queries")>();
+vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/bids/bid.queries")>();
   return {
     ...actual,
     save: async (input: BidWrite, tx?: DbHandle) => {
@@ -83,8 +83,8 @@ import { closeDb, getDb } from "@/db/client";
 import { auditLog, bid, mission, notification, users } from "@/db/schema";
 import { getMissionDao } from "@/features/missions/mission.cache";
 import * as missionQueries from "@/features/missions/mission.queries";
-import * as bidQueries from "./bid.queries";
-import { accept } from "./bid.service";
+import * as bidQueries from "@/features/bids/bid.queries";
+import { accept } from "@/features/bids/bid.service";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

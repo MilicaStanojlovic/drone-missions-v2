@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { MISSION_STATUSES, mission, rating, users } from "@/db/schema";
-import * as queries from "./mission.queries";
-import type { OpenMissionQuery } from "./mission.queries";
-import type { MissionStatus, MissionWrite } from "./mission.types";
+import * as queries from "@/features/missions/mission.queries";
+import type { OpenMissionQuery } from "@/features/missions/mission.queries";
+import type { MissionStatus, MissionWrite } from "@/features/missions/mission.types";
 
 /**
  * Live-DB suite for the mission data-access layer.

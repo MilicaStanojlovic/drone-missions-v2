@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toRatingResponse, toUserRatingsResponse } from "./rating.mapper";
-import type { Rating } from "./rating.types";
+import { toRatingResponse, toUserRatingsResponse } from "@/features/ratings/rating.mapper";
+import type { Rating } from "@/features/ratings/rating.types";
 
 /**
  * Vitest suite for `rating.mapper.ts`.

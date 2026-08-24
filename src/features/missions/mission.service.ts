@@ -23,8 +23,8 @@ import {
   findByIdOrUndefined as findUserByIdOrUndefined,
 } from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
-import { getMissionDao } from "./mission.cache";
-import type { Mission, MissionModeration, MissionStatus, MissionWrite } from "./mission.types";
+import { getMissionDao } from "@/features/missions/mission.cache";
+import type { Mission, MissionModeration, MissionStatus, MissionWrite } from "@/features/missions/mission.types";
 
 /**
  * Mission business logic (replaces `business.service.mission.MissionService`).

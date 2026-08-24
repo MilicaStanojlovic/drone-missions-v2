@@ -7,7 +7,7 @@ import {
 import { UserNotFoundError } from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
 import type { User } from "@/features/users/user.types";
-import type { Bid } from "./bid.types";
+import type { Bid } from "@/features/bids/bid.types";
 
 /**
  * Vitest suite for `bid.service.ts`.
@@ -62,7 +62,7 @@ const queriesMock = {
   save: vi.fn(),
   deleteBid: vi.fn(),
 };
-vi.mock("./bid.queries", () => ({
+vi.mock("@/features/bids/bid.queries", () => ({
   findById: (...args: unknown[]) => queriesMock.findById(...args),
   findByMissionAndPilot: (...args: unknown[]) => queriesMock.findByMissionAndPilot(...args),
   findByMissionAndStatus: (...args: unknown[]) => queriesMock.findByMissionAndStatus(...args),
@@ -142,7 +142,7 @@ import {
   myBids,
   place,
   withdraw,
-} from "./bid.service";
+} from "@/features/bids/bid.service";
 
 /** The Java test's `user(id, suspended)` helper, with the columns this port has. */
 function fakeUser(id: number, suspended: boolean, overrides: Partial<User> = {}): User {

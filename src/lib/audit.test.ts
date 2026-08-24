@@ -17,7 +17,7 @@ import {
   userLoggedIn,
   userRegistered,
   type AuditActorUser,
-} from "./audit";
+} from "@/lib/audit";
 
 /**
  * Vitest suite for `audit.ts`.

@@ -88,7 +88,7 @@ vi.mock("@/features/users/user.queries", async (importOriginal) => {
 
 // `vi.mock` calls above are hoisted by Vitest, so this static import already
 // resolves against the mocked modules.
-import { overview } from "./stats.service";
+import { overview } from "@/features/stats/stats.service";
 
 /** The Java `setUp()`, plus Mockito's default `0L` answers made explicit. */
 beforeEach(() => {

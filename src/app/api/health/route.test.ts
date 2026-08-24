@@ -30,7 +30,7 @@ vi.mock("@/lib/env", () => ({
 
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { GET } from "./route";
+import { GET } from "@/app/api/health/route";
 
 const dummyRequest = new Request("http://localhost/api/health");
 

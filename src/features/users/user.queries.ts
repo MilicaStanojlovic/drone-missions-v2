@@ -4,7 +4,7 @@ import { getDb } from "@/db/client";
 import { users, type UserRole } from "@/db/schema";
 import { offsetOf, type Page, type PageRequest } from "@/lib/api/paging";
 import { NotFoundError } from "@/lib/errors";
-import type { NewUser, User } from "./user.types";
+import type { NewUser, User } from "@/features/users/user.types";
 
 /**
  * User lookup, insert and admin-listing queries (replaces

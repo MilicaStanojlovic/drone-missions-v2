@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mission } from "@/features/missions/mission.types";
 import { MissionNotFoundError } from "@/features/missions/mission.service";
 import type { User } from "@/features/users/user.types";
-import type { RatingWrite } from "./rating.queries";
-import type { Rating } from "./rating.types";
+import type { RatingWrite } from "@/features/ratings/rating.queries";
+import type { Rating } from "@/features/ratings/rating.types";
 
 /**
  * Vitest suite for `rating.service.ts`.
@@ -69,8 +69,8 @@ const queriesMock = {
 };
 // Partial: the row-level reads and the write are stubbed, while the real
 // `summariesFor`/`summaryFor` stay in place for the three no-query cases.
-vi.mock("./rating.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./rating.queries")>();
+vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/ratings/rating.queries")>();
   return {
     ...actual,
     insertRating: (...args: unknown[]) => queriesMock.insertRating(...args),
@@ -118,7 +118,7 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 // `vi.mock` calls above are hoisted by Vitest, so these static imports already
 // resolve against the mocked modules — including the two real aggregate
 // functions re-exported from the partially mocked query module.
-import { RATING_SUMMARY_NONE, summariesFor, summaryFor } from "./rating.queries";
+import { RATING_SUMMARY_NONE, summariesFor, summaryFor } from "@/features/ratings/rating.queries";
 import {
   AlreadyRatedError,
   NotMissionParticipantError,
@@ -126,7 +126,7 @@ import {
   create,
   forMission,
   receivedBy,
-} from "./rating.service";
+} from "@/features/ratings/rating.service";
 
 /** The Java test's constants, unchanged. */
 const MISSION_ID = 7;

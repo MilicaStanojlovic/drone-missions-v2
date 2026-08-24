@@ -1,8 +1,8 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
 import type { PagedModel } from "@/lib/api/paging";
-import type { MissionResponse } from "./mission.mapper";
-import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "./mission.types";
+import type { MissionResponse } from "@/features/missions/mission.mapper";
+import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "@/features/missions/mission.types";
 
 /**
  * Client-side mission access: the browser-facing mirror of the missions

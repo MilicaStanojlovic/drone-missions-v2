@@ -77,8 +77,8 @@ import {
 } from "@/features/ratings/rating.service";
 import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
 import { MissionNotFoundError } from "@/features/missions/mission.service";
-import { GET as forMissionRoute, POST as rateRoute } from "./mission/[missionId]/route";
-import { GET as forUserRoute } from "./user/[userId]/route";
+import { GET as forMissionRoute, POST as rateRoute } from "@/app/api/v1/ratings/mission/[missionId]/route";
+import { GET as forUserRoute } from "@/app/api/v1/ratings/user/[userId]/route";
 
 const DESIGNER_ID = 7;
 const PILOT_ID = 42;

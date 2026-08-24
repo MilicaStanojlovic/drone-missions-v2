@@ -61,11 +61,11 @@ import { AdminCannotBeSuspendedError } from "@/features/users/user.service";
 import { EmailAlreadyExistsError } from "@/features/auth/auth.service";
 import { UserNotFoundError } from "@/features/users/user.queries";
 import { middleware } from "@/middleware";
-import { GET as listRoute } from "./route";
-import { GET as byIdRoute } from "./[id]/route";
-import { POST as createAdminRoute } from "./admins/route";
-import { POST as suspendRoute } from "./[id]/suspend/route";
-import { POST as reactivateRoute } from "./[id]/reactivate/route";
+import { GET as listRoute } from "@/app/api/v1/users/route";
+import { GET as byIdRoute } from "@/app/api/v1/users/[id]/route";
+import { POST as createAdminRoute } from "@/app/api/v1/users/admins/route";
+import { POST as suspendRoute } from "@/app/api/v1/users/[id]/suspend/route";
+import { POST as reactivateRoute } from "@/app/api/v1/users/[id]/reactivate/route";
 
 const ADMIN_ID = 80;
 const PILOT_ID = 3;

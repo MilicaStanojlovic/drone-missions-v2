@@ -1,6 +1,6 @@
 import "server-only";
-import type { RatingSummary } from "./rating.queries";
-import type { Rating } from "./rating.types";
+import type { RatingSummary } from "@/features/ratings/rating.queries";
+import type { Rating } from "@/features/ratings/rating.types";
 
 /**
  * Rating DTO mapping (replaces `web.mapper.rating.RatingMapper` and the

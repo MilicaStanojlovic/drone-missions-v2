@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { mission, rating, users } from "@/db/schema";
-import * as queries from "./rating.queries";
+import * as queries from "@/features/ratings/rating.queries";
 
 /**
  * Live-DB suite for the rating data-access layer.

@@ -16,8 +16,8 @@ import {
   findByIdOrUndefined as findUserByIdOrUndefined,
 } from "@/features/users/user.queries";
 import { UserSuspendedError } from "@/features/users/user.service";
-import * as queries from "./bid.queries";
-import type { Bid } from "./bid.types";
+import * as queries from "@/features/bids/bid.queries";
+import type { Bid } from "@/features/bids/bid.types";
 
 /**
  * Bid business logic (replaces `business.service.bid.BidService`).

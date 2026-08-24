@@ -60,7 +60,7 @@ import {
   EmailAlreadyExistsError,
   InvalidCredentialsError,
   login,
-} from "./auth.service";
+} from "@/features/auth/auth.service";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
 import type { User } from "@/features/users/user.types";
-import type { NewNotification as NewNotificationInput } from "./notification.types";
+import type { NewNotification as NewNotificationInput } from "@/features/notifications/notification.types";
 
 /**
  * Vitest suite for `overdue-sweep.ts`.
@@ -55,7 +55,7 @@ vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMo
 
 const createNotificationMock = vi.fn();
 const overdueExistsMock = vi.fn();
-vi.mock("./notification.service", () => ({
+vi.mock("@/features/notifications/notification.service", () => ({
   create: (...args: unknown[]) => createNotificationMock(...args),
   overdueExists: (...args: unknown[]) => overdueExistsMock(...args),
 }));
@@ -82,7 +82,7 @@ vi.mock("@/lib/email/email.service", () => ({
 // `vi.mock` calls above are hoisted by Vitest, so these static imports already
 // resolve against the mocked modules.
 import { logger } from "@/lib/logger";
-import { runOverdueSweep } from "./overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

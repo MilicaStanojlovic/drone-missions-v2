@@ -4,9 +4,9 @@ import { NextRequest } from "next/server";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import { middleware } from "@/middleware";
-import { POST as registerRoute } from "./register/route";
-import { POST as loginRoute } from "./login/route";
-import { POST as logoutRoute } from "./logout/route";
+import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
+import { POST as loginRoute } from "@/app/api/v1/auth/login/route";
+import { POST as logoutRoute } from "@/app/api/v1/auth/logout/route";
 
 /**
  * Route-level integration suite for `POST /api/v1/auth/{register,login,logout}`.

@@ -46,7 +46,7 @@ vi.mock("@/features/audit/audit.service", async (importOriginal) => {
 
 // `vi.mock` is hoisted, so these already resolve against the mocked module.
 import { middleware } from "@/middleware";
-import { GET as listRoute } from "./route";
+import { GET as listRoute } from "@/app/api/v1/audit-log/route";
 
 const ADMIN_ID = 9;
 

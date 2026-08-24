@@ -4,8 +4,8 @@ import { logger } from "@/lib/logger";
 import { getMissionDao } from "@/features/missions/mission.cache";
 import type { MissionStatus } from "@/features/missions/mission.types";
 import { findByIdOrUndefined as findUserByIdOrUndefined } from "@/features/users/user.queries";
-import { create as createNotification, overdueExists } from "./notification.service";
-import { NewNotification } from "./notification.types";
+import { create as createNotification, overdueExists } from "@/features/notifications/notification.service";
+import { NewNotification } from "@/features/notifications/notification.types";
 
 /**
  * The overdue sweep — the port of

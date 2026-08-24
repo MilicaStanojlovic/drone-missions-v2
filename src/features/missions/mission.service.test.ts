@@ -3,8 +3,8 @@ import type { Bid } from "@/features/bids/bid.types";
 import type { User } from "@/features/users/user.types";
 import { UserSuspendedError } from "@/features/users/user.service";
 import { UserNotFoundError } from "@/features/users/user.queries";
-import type { Mission, MissionStatus } from "./mission.types";
-import type { OpenMissionQuery } from "./mission.queries";
+import type { Mission, MissionStatus } from "@/features/missions/mission.types";
+import type { OpenMissionQuery } from "@/features/missions/mission.queries";
 
 /**
  * Vitest suite for `mission.service.ts`.
@@ -70,7 +70,7 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 };
-vi.mock("./mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 /**
  * The stand-in for the handle Drizzle passes a `db.transaction` callback. The
@@ -150,7 +150,7 @@ import {
   unhide,
   update,
   type MissionDraft,
-} from "./mission.service";
+} from "@/features/missions/mission.service";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {
