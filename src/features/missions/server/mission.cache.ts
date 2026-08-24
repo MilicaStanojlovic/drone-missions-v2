@@ -5,8 +5,8 @@ import type { Page, PageRequest } from "@/lib/api/paging";
 import { TtlCache, formatCacheStats, type CacheStats, type Clock } from "@/lib/cache";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import * as queries from "@/features/missions/mission.queries";
-import type { OpenMissionQuery } from "@/features/missions/mission.queries";
+import * as queries from "@/features/missions/server/mission.queries";
+import type { OpenMissionQuery } from "@/features/missions/server/mission.queries";
 import type { Geofence, Mission, MissionWrite, Waypoint } from "@/features/missions/mission.types";
 
 /**

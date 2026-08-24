@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { overview } from "@/features/stats/stats.service";
+import { overview } from "@/features/stats/server/stats.service";
 import type { PlatformStats } from "@/features/stats/stats.types";
 
 /**

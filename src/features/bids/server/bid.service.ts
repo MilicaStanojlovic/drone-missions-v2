@@ -3,20 +3,20 @@ import { getDb } from "@/db/client";
 import { bidAccepted, bidPlaced, bidWithdrawn, record } from "@/lib/audit";
 import { emailService } from "@/lib/email/email.service";
 import { ConflictError, NotFoundError } from "@/lib/errors";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import {
   MissionAccessDeniedError,
   MissionNotFoundError,
-} from "@/features/missions/mission.service";
+} from "@/features/missions/server/mission.service";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
-import { create as createNotification } from "@/features/notifications/notification.service";
+import { create as createNotification } from "@/features/notifications/server/notification.service";
 import { NewNotification } from "@/features/notifications/notification.types";
 import {
   findById as findUserById,
   findByIdOrUndefined as findUserByIdOrUndefined,
-} from "@/features/users/user.queries";
-import { UserSuspendedError } from "@/features/users/user.service";
-import * as queries from "@/features/bids/bid.queries";
+} from "@/features/users/server/user.queries";
+import { UserSuspendedError } from "@/features/users/server/user.service";
+import * as queries from "@/features/bids/server/bid.queries";
 import type { Bid } from "@/features/bids/bid.types";
 
 /**

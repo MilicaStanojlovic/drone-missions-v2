@@ -5,7 +5,7 @@ import { closeDb, getDb } from "@/db/client";
 import { mission, notification, users } from "@/db/schema";
 import { middleware } from "@/middleware";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
-import { insertUser } from "@/features/users/user.queries";
+import { insertUser } from "@/features/users/server/user.queries";
 import type { NotificationType, UserRole } from "@/db/schema";
 import { GET as listRoute } from "@/app/api/v1/notifications/route";
 import { GET as unreadCountRoute } from "@/app/api/v1/notifications/unread-count/route";

@@ -1,10 +1,10 @@
 import "server-only";
 import { emailService } from "@/lib/email/email.service";
 import { logger } from "@/lib/logger";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import type { MissionStatus } from "@/features/missions/mission.types";
-import { findByIdOrUndefined as findUserByIdOrUndefined } from "@/features/users/user.queries";
-import { create as createNotification, overdueExists } from "@/features/notifications/notification.service";
+import { findByIdOrUndefined as findUserByIdOrUndefined } from "@/features/users/server/user.queries";
+import { create as createNotification, overdueExists } from "@/features/notifications/server/notification.service";
 import { NewNotification } from "@/features/notifications/notification.types";
 
 /**

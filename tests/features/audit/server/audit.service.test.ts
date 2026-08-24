@@ -29,13 +29,13 @@ import type { AuditLog, AuditSearchFilters } from "@/features/audit/audit.types"
  */
 
 const searchMock = vi.fn();
-vi.mock("@/features/audit/audit.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/audit/audit.queries")>();
+vi.mock("@/features/audit/server/audit.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/audit/server/audit.queries")>();
   return { ...actual, search: (...args: unknown[]) => searchMock(...args) };
 });
 
 // `vi.mock` is hoisted, so this already resolves against the mocked module.
-import { search } from "@/features/audit/audit.service";
+import { search } from "@/features/audit/server/audit.service";
 
 /** `PageRequest.of(0, 20)` — the pageable the Java test threads through. */
 const pageable: PageRequest = { page: 0, size: 20 };

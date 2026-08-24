@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { mission, notification, users } from "@/db/schema";
-import { insertUser } from "@/features/users/user.queries";
+import { insertUser } from "@/features/users/server/user.queries";
 import {
   NotificationNotFoundError,
   create,
@@ -11,7 +11,7 @@ import {
   markRead,
   overdueExists,
   unreadCount,
-} from "@/features/notifications/notification.service";
+} from "@/features/notifications/server/notification.service";
 import { NewNotification, type NotificationType } from "@/features/notifications/notification.types";
 
 /**

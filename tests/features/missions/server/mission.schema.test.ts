@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geofenceSchema, missionRequestSchema, waypointSchema } from "@/features/missions/mission.schema";
+import { geofenceSchema, missionRequestSchema, waypointSchema } from "@/features/missions/server/mission.schema";
 import type { WaypointAction } from "@/features/missions/mission.types";
 
 /**

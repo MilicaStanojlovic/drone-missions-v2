@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { remove } from "@/features/missions/mission.service";
+import { remove } from "@/features/missions/server/mission.service";
 
 /**
  * `POST /api/v1/missions/{id}/remove` — an admin permanently deletes a mission

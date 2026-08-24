@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
-import { loginSchema } from "@/features/auth/auth.schema";
-import { login } from "@/features/auth/auth.service";
-import { toUserResponse } from "@/features/users/user.mapper";
+import { loginSchema } from "@/features/auth/server/auth.schema";
+import { login } from "@/features/auth/server/auth.service";
+import { toUserResponse } from "@/features/users/server/user.mapper";
 import type { UserResponse } from "@/features/users/user.types";
 
 /**

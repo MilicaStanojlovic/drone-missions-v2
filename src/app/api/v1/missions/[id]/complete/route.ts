@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { loadMissionResponse, type MissionResponse } from "@/features/missions/mission.mapper";
-import { complete } from "@/features/missions/mission.service";
+import { loadMissionResponse, type MissionResponse } from "@/features/missions/server/mission.mapper";
+import { complete } from "@/features/missions/server/mission.service";
 
 /**
  * `POST /api/v1/missions/{id}/complete` — the awarded pilot marks the work

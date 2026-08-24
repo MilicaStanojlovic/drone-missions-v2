@@ -22,7 +22,7 @@ import { getTasks, validate } from "node-cron";
  */
 
 const runOverdueSweepMock = vi.fn();
-vi.mock("@/features/notifications/overdue-sweep", () => ({
+vi.mock("@/features/notifications/server/overdue-sweep", () => ({
   runOverdueSweep: () => runOverdueSweepMock(),
 }));
 

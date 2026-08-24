@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
-import { toPublicUserResponse } from "@/features/users/user.mapper";
-import { findById } from "@/features/users/user.service";
+import { toPublicUserResponse } from "@/features/users/server/user.mapper";
+import { findById } from "@/features/users/server/user.service";
 import type { PublicUserResponse } from "@/features/users/user.types";
 
 /**

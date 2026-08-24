@@ -1,5 +1,5 @@
 import "server-only";
-import type { RatingSummary } from "@/features/ratings/rating.queries";
+import type { RatingSummary } from "@/features/ratings/server/rating.queries";
 import type { Rating } from "@/features/ratings/rating.types";
 
 /**

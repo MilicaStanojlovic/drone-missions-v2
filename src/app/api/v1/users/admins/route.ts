@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { newAdminSchema } from "@/features/auth/auth.schema";
-import { createAdmin } from "@/features/auth/auth.service";
-import { toUserResponse } from "@/features/users/user.mapper";
+import { newAdminSchema } from "@/features/auth/server/auth.schema";
+import { createAdmin } from "@/features/auth/server/auth.service";
+import { toUserResponse } from "@/features/users/server/user.mapper";
 import type { UserResponse } from "@/features/users/user.types";
 
 /**

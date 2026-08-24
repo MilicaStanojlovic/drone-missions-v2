@@ -3,7 +3,7 @@ import { inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, users } from "@/db/schema";
 import type { AuditAction, AuditActorRole, UserRole } from "@/db/schema";
-import { search } from "@/features/audit/audit.queries";
+import { search } from "@/features/audit/server/audit.queries";
 import type { AuditSearchFilters } from "@/features/audit/audit.types";
 
 /**

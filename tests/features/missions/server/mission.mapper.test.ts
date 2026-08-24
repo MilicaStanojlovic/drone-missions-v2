@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/features/users/user.types";
-import type { RatingSummary } from "@/features/ratings/rating.queries";
+import type { RatingSummary } from "@/features/ratings/server/rating.queries";
 import type { Mission } from "@/features/missions/mission.types";
 
 /**
@@ -24,8 +24,8 @@ import type { Mission } from "@/features/missions/mission.types";
 
 const summariesForMock = vi.fn();
 const summaryForMock = vi.fn();
-vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/ratings/rating.queries")>();
+vi.mock("@/features/ratings/server/rating.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/ratings/server/rating.queries")>();
   return {
     ...actual,
     summariesFor: (...args: unknown[]) => summariesForMock(...args),
@@ -34,7 +34,7 @@ vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
 });
 
 // `vi.mock` is hoisted, so these already resolve against the mock.
-import { loadMissionResponse, loadMissionResponses, toMissionResponse } from "@/features/missions/mission.mapper";
+import { loadMissionResponse, loadMissionResponses, toMissionResponse } from "@/features/missions/server/mission.mapper";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

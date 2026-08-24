@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loginSchema, registerSchema } from "@/features/auth/auth.schema";
+import { loginSchema, registerSchema } from "@/features/auth/server/auth.schema";
 
 /**
  * Vitest suite for `auth.schema.ts` — DB-less coverage of every

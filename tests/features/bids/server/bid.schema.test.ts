@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bidRequestSchema } from "@/features/bids/bid.schema";
+import { bidRequestSchema } from "@/features/bids/server/bid.schema";
 
 /**
  * Vitest suite for `bid.schema.ts` — DB-less coverage of the two validation

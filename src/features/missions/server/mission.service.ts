@@ -15,15 +15,15 @@ import {
 import type { Page, PageRequest } from "@/lib/api/paging";
 import { emailService } from "@/lib/email/email.service";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
-import * as bidQueries from "@/features/bids/bid.queries";
-import { create as createNotification } from "@/features/notifications/notification.service";
+import * as bidQueries from "@/features/bids/server/bid.queries";
+import { create as createNotification } from "@/features/notifications/server/notification.service";
 import { NewNotification } from "@/features/notifications/notification.types";
 import {
   findById as findUserById,
   findByIdOrUndefined as findUserByIdOrUndefined,
-} from "@/features/users/user.queries";
-import { UserSuspendedError } from "@/features/users/user.service";
-import { getMissionDao } from "@/features/missions/mission.cache";
+} from "@/features/users/server/user.queries";
+import { UserSuspendedError } from "@/features/users/server/user.service";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import type { Mission, MissionModeration, MissionStatus, MissionWrite } from "@/features/missions/mission.types";
 
 /**

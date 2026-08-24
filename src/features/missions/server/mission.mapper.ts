@@ -4,9 +4,9 @@ import {
   summaryFor,
   summaryOf,
   type RatingSummary,
-} from "@/features/ratings/rating.queries";
-import type { GeofenceInput, MissionRequestInput } from "@/features/missions/mission.schema";
-import type { MissionDraft } from "@/features/missions/mission.service";
+} from "@/features/ratings/server/rating.queries";
+import type { GeofenceInput, MissionRequestInput } from "@/features/missions/server/mission.schema";
+import type { MissionDraft } from "@/features/missions/server/mission.service";
 import type {
   Geofence,
   Mission,

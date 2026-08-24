@@ -1,6 +1,6 @@
 import "server-only";
 import { NotFoundError } from "@/lib/errors";
-import * as queries from "@/features/notifications/notification.queries";
+import * as queries from "@/features/notifications/server/notification.queries";
 import type { NewNotification, Notification } from "@/features/notifications/notification.types";
 
 /**

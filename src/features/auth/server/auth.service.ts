@@ -1,7 +1,7 @@
 import "server-only";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { signJwt } from "@/lib/auth/jwt";
-import { existsByEmail, findByEmail, insertUser } from "@/features/users/user.queries";
+import { existsByEmail, findByEmail, insertUser } from "@/features/users/server/user.queries";
 import type { User } from "@/features/users/user.types";
 import type { UserRole } from "@/db/schema";
 import { ConflictError, ForbiddenError, UnauthorizedError } from "@/lib/errors";

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MissionDao } from "@/features/missions/mission.cache";
+import type { MissionDao } from "@/features/missions/server/mission.cache";
 import type { Page, PageRequest } from "@/lib/api/paging";
 import type { NewAuditEntry } from "@/lib/audit";
 import type { User } from "@/features/users/user.types";
-import { UserNotFoundError } from "@/features/users/user.queries";
+import { UserNotFoundError } from "@/features/users/server/user.queries";
 
 /**
  * Vitest suite for `user.service.ts`.
@@ -71,8 +71,8 @@ import { UserNotFoundError } from "@/features/users/user.queries";
 const findByIdMock = vi.fn();
 const searchMock = vi.fn();
 const setSuspendedMock = vi.fn();
-vi.mock("@/features/users/user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
+vi.mock("@/features/users/server/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.queries")>();
   return {
     ...actual,
     findById: (...args: unknown[]) => findByIdMock(...args),
@@ -106,7 +106,7 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 } satisfies MissionDao;
-vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/server/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 const recordMock = vi.fn();
 vi.mock("@/lib/audit", async (importOriginal) => {
@@ -116,7 +116,7 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 
 // `vi.mock` calls above are hoisted by Vitest, so these static imports already
 // resolve against the mocked modules.
-import { AdminCannotBeSuspendedError, findById, reactivate, search, suspend } from "@/features/users/user.service";
+import { AdminCannotBeSuspendedError, findById, reactivate, search, suspend } from "@/features/users/server/user.service";
 
 /**
  * The Java test's `user(role, suspended)` helper: id 3, username "pilot-mira".

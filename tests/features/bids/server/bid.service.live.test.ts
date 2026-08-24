@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { DbHandle } from "@/db/client";
-import type { BidWrite } from "@/features/bids/bid.queries";
+import type { BidWrite } from "@/features/bids/server/bid.queries";
 import type { MissionWrite } from "@/features/missions/mission.types";
 
 /**
@@ -52,8 +52,8 @@ const inject = vi.hoisted(() => ({
   afterMissionSave: null as null | ((input: MissionWrite, tx?: DbHandle) => Promise<void>),
 }));
 
-vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/bids/bid.queries")>();
+vi.mock("@/features/bids/server/bid.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/bids/server/bid.queries")>();
   return {
     ...actual,
     save: async (input: BidWrite, tx?: DbHandle) => {
@@ -64,8 +64,8 @@ vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
   };
 });
 
-vi.mock("@/features/missions/mission.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/missions/mission.queries")>();
+vi.mock("@/features/missions/server/mission.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/missions/server/mission.queries")>();
   return {
     ...actual,
     save: async (input: MissionWrite, tx?: DbHandle) => {
@@ -81,10 +81,10 @@ vi.mock("@/features/missions/mission.queries", async (importOriginal) => {
 // which builds its uncached DAO out of `mission.queries`' exports).
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, bid, mission, notification, users } from "@/db/schema";
-import { getMissionDao } from "@/features/missions/mission.cache";
-import * as missionQueries from "@/features/missions/mission.queries";
-import * as bidQueries from "@/features/bids/bid.queries";
-import { accept } from "@/features/bids/bid.service";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
+import * as missionQueries from "@/features/missions/server/mission.queries";
+import * as bidQueries from "@/features/bids/server/bid.queries";
+import { accept } from "@/features/bids/server/bid.service";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

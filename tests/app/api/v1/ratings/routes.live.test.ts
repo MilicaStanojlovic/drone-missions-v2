@@ -3,7 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, mission, rating, users } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import type { UserRole } from "@/db/schema";
 import { GET as forMissionRoute, POST as rateRoute } from "@/app/api/v1/ratings/mission/[missionId]/route";
 import { GET as forUserRoute } from "@/app/api/v1/ratings/user/[userId]/route";

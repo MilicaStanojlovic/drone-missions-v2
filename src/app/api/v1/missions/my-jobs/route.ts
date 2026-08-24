@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { loadMissionResponses, type MissionResponse } from "@/features/missions/mission.mapper";
-import { findAwardedTo } from "@/features/missions/mission.service";
+import { loadMissionResponses, type MissionResponse } from "@/features/missions/server/mission.mapper";
+import { findAwardedTo } from "@/features/missions/server/mission.service";
 
 /**
  * `GET /api/v1/missions/my-jobs` — the calling pilot's awarded missions, their

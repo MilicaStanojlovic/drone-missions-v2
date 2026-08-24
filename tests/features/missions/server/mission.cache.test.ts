@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CachingMissionDao, type MissionCacheOptions, type MissionDao } from "@/features/missions/mission.cache";
-import type { OpenMissionQuery } from "@/features/missions/mission.queries";
+import { CachingMissionDao, type MissionCacheOptions, type MissionDao } from "@/features/missions/server/mission.cache";
+import type { OpenMissionQuery } from "@/features/missions/server/mission.queries";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
 import type { User } from "@/features/users/user.types";
 

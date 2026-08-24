@@ -1,12 +1,12 @@
 import "server-only";
 import { MISSION_STATUSES, USER_ROLES, type MissionStatus, type UserRole } from "@/db/schema";
-import { topMissionsByBids, volume } from "@/features/bids/bid.queries";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { topMissionsByBids, volume } from "@/features/bids/server/bid.queries";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import {
   countByRole,
   countByRoleAndSuspendedFalse,
   countBySuspendedTrue,
-} from "@/features/users/user.queries";
+} from "@/features/users/server/user.queries";
 import type { PlatformStats, TopMission } from "@/features/stats/stats.types";
 
 /**

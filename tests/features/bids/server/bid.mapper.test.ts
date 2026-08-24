@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toBidResponse } from "@/features/bids/bid.mapper";
+import { toBidResponse } from "@/features/bids/server/bid.mapper";
 import type { Bid } from "@/features/bids/bid.types";
 
 /**

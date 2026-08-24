@@ -50,8 +50,8 @@ import type { PlatformStats } from "@/features/stats/stats.types";
  */
 
 const overviewMock = vi.fn();
-vi.mock("@/features/stats/stats.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/stats/stats.service")>();
+vi.mock("@/features/stats/server/stats.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/stats/server/stats.service")>();
   return { ...actual, overview: (...args: unknown[]) => overviewMock(...args) };
 });
 

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { DbHandle } from "@/db/client";
-import type { BidWrite } from "@/features/bids/bid.queries";
+import type { BidWrite } from "@/features/bids/server/bid.queries";
 
 /**
  * Live-DB suite for the **atomicity** of `MissionService.cancel` — the half of
@@ -48,8 +48,8 @@ const inject = vi.hoisted(() => ({
   afterBidSave: null as null | ((input: BidWrite, tx?: DbHandle) => Promise<void>),
 }));
 
-vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/bids/bid.queries")>();
+vi.mock("@/features/bids/server/bid.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/bids/server/bid.queries")>();
   return {
     ...actual,
     save: async (input: BidWrite, tx?: DbHandle) => {
@@ -64,10 +64,10 @@ vi.mock("@/features/bids/bid.queries", async (importOriginal) => {
 // against the wrapped bid query module.
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, bid, mission, notification, users } from "@/db/schema";
-import * as bidQueries from "@/features/bids/bid.queries";
-import { getMissionDao } from "@/features/missions/mission.cache";
-import * as missionQueries from "@/features/missions/mission.queries";
-import { cancel } from "@/features/missions/mission.service";
+import * as bidQueries from "@/features/bids/server/bid.queries";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
+import * as missionQueries from "@/features/missions/server/mission.queries";
+import { cancel } from "@/features/missions/server/mission.service";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

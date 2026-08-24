@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { toUserResponse } from "@/features/users/user.mapper";
-import { suspend } from "@/features/users/user.service";
+import { toUserResponse } from "@/features/users/server/user.mapper";
+import { suspend } from "@/features/users/server/user.service";
 import type { UserResponse } from "@/features/users/user.types";
 
 /**

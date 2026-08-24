@@ -63,8 +63,8 @@ const searchAllMock = vi.fn();
 const hideMock = vi.fn();
 const unhideMock = vi.fn();
 const removeMock = vi.fn();
-vi.mock("@/features/missions/mission.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/missions/mission.service")>();
+vi.mock("@/features/missions/server/mission.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/missions/server/mission.service")>();
   return {
     ...actual,
     create: (...args: unknown[]) => createMock(...args),
@@ -86,8 +86,8 @@ vi.mock("@/features/missions/mission.service", async (importOriginal) => {
 
 const summariesForMock = vi.fn();
 const summaryForMock = vi.fn();
-vi.mock("@/features/ratings/rating.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/ratings/rating.queries")>();
+vi.mock("@/features/ratings/server/rating.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/ratings/server/rating.queries")>();
   return {
     ...actual,
     summariesFor: (...args: unknown[]) => summariesForMock(...args),
@@ -101,9 +101,9 @@ import {
   MissionAccessDeniedError,
   MissionConflictError,
   MissionNotFoundError,
-} from "@/features/missions/mission.service";
-import { UserSuspendedError } from "@/features/users/user.service";
-import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
+} from "@/features/missions/server/mission.service";
+import { UserSuspendedError } from "@/features/users/server/user.service";
+import { RATING_SUMMARY_NONE } from "@/features/ratings/server/rating.queries";
 import { middleware } from "@/middleware";
 import { GET as feedRoute, POST as createRoute } from "@/app/api/v1/missions/route";
 import { GET as myMissionsRoute } from "@/app/api/v1/missions/my-missions/route";

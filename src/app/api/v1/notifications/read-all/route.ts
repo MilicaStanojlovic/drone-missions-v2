@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { markAllRead } from "@/features/notifications/notification.service";
+import { markAllRead } from "@/features/notifications/server/notification.service";
 
 /**
  * `POST /api/v1/notifications/read-all` — mark all of the caller's

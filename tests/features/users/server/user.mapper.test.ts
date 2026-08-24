@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toPublicUserResponse, toUserResponse } from "@/features/users/user.mapper";
+import { toPublicUserResponse, toUserResponse } from "@/features/users/server/user.mapper";
 import type { User } from "@/features/users/user.types";
 
 /**

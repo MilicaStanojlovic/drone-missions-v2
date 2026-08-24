@@ -55,8 +55,8 @@ const createMock = vi.fn();
 const forMissionMock = vi.fn();
 const receivedByMock = vi.fn();
 const summaryForMock = vi.fn();
-vi.mock("@/features/ratings/rating.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/ratings/rating.service")>();
+vi.mock("@/features/ratings/server/rating.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/ratings/server/rating.service")>();
   return {
     ...actual,
     create: (...args: unknown[]) => createMock(...args),
@@ -74,9 +74,9 @@ import {
   AlreadyRatedError,
   NotMissionParticipantError,
   RatingNotYetAllowedError,
-} from "@/features/ratings/rating.service";
-import { RATING_SUMMARY_NONE } from "@/features/ratings/rating.queries";
-import { MissionNotFoundError } from "@/features/missions/mission.service";
+} from "@/features/ratings/server/rating.service";
+import { RATING_SUMMARY_NONE } from "@/features/ratings/server/rating.queries";
+import { MissionNotFoundError } from "@/features/missions/server/mission.service";
 import { GET as forMissionRoute, POST as rateRoute } from "@/app/api/v1/ratings/mission/[missionId]/route";
 import { GET as forUserRoute } from "@/app/api/v1/ratings/user/[userId]/route";
 

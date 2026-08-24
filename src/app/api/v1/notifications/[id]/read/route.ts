@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { markRead } from "@/features/notifications/notification.service";
+import { markRead } from "@/features/notifications/server/notification.service";
 
 /**
  * `POST /api/v1/notifications/{id}/read` — mark one notification read

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MISSION_STATUSES, USER_ROLES } from "@/db/schema";
-import type { MissionDao } from "@/features/missions/mission.cache";
+import type { MissionDao } from "@/features/missions/server/mission.cache";
 
 /**
  * Vitest suite for `stats.service.ts`.
@@ -64,11 +64,11 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 } satisfies MissionDao;
-vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/server/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 const volumeMock = vi.fn();
 const topMissionsByBidsMock = vi.fn();
-vi.mock("@/features/bids/bid.queries", () => ({
+vi.mock("@/features/bids/server/bid.queries", () => ({
   volume: (...args: unknown[]) => volumeMock(...args),
   topMissionsByBids: (...args: unknown[]) => topMissionsByBidsMock(...args),
 }));
@@ -76,8 +76,8 @@ vi.mock("@/features/bids/bid.queries", () => ({
 const countByRoleMock = vi.fn();
 const countByRoleAndSuspendedFalseMock = vi.fn();
 const countBySuspendedTrueMock = vi.fn();
-vi.mock("@/features/users/user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
+vi.mock("@/features/users/server/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.queries")>();
   return {
     ...actual,
     countByRole: (...args: unknown[]) => countByRoleMock(...args),
@@ -88,7 +88,7 @@ vi.mock("@/features/users/user.queries", async (importOriginal) => {
 
 // `vi.mock` calls above are hoisted by Vitest, so this static import already
 // resolves against the mocked modules.
-import { overview } from "@/features/stats/stats.service";
+import { overview } from "@/features/stats/server/stats.service";
 
 /** The Java `setUp()`, plus Mockito's default `0L` answers made explicit. */
 beforeEach(() => {

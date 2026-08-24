@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { toBidResponse } from "@/features/bids/bid.mapper";
-import { bidRequestSchema } from "@/features/bids/bid.schema";
-import { listForMission, place } from "@/features/bids/bid.service";
+import { toBidResponse } from "@/features/bids/server/bid.mapper";
+import { bidRequestSchema } from "@/features/bids/server/bid.schema";
+import { listForMission, place } from "@/features/bids/server/bid.service";
 import type { BidResponse } from "@/features/bids/bid.types";
 
 /**

@@ -39,8 +39,8 @@ const searchMock = vi.fn();
 const findByIdMock = vi.fn();
 const suspendMock = vi.fn();
 const reactivateMock = vi.fn();
-vi.mock("@/features/users/user.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.service")>();
+vi.mock("@/features/users/server/user.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.service")>();
   return {
     ...actual,
     search: (...args: unknown[]) => searchMock(...args),
@@ -51,15 +51,15 @@ vi.mock("@/features/users/user.service", async (importOriginal) => {
 });
 
 const createAdminMock = vi.fn();
-vi.mock("@/features/auth/auth.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/auth/auth.service")>();
+vi.mock("@/features/auth/server/auth.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/auth/server/auth.service")>();
   return { ...actual, createAdmin: (...args: unknown[]) => createAdminMock(...args) };
 });
 
 // `vi.mock` is hoisted, so these already resolve against the mocked module.
-import { AdminCannotBeSuspendedError } from "@/features/users/user.service";
-import { EmailAlreadyExistsError } from "@/features/auth/auth.service";
-import { UserNotFoundError } from "@/features/users/user.queries";
+import { AdminCannotBeSuspendedError } from "@/features/users/server/user.service";
+import { EmailAlreadyExistsError } from "@/features/auth/server/auth.service";
+import { UserNotFoundError } from "@/features/users/server/user.queries";
 import { middleware } from "@/middleware";
 import { GET as listRoute } from "@/app/api/v1/users/route";
 import { GET as byIdRoute } from "@/app/api/v1/users/[id]/route";

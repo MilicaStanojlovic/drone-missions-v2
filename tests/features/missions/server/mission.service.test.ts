@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bid } from "@/features/bids/bid.types";
 import type { User } from "@/features/users/user.types";
-import { UserSuspendedError } from "@/features/users/user.service";
-import { UserNotFoundError } from "@/features/users/user.queries";
+import { UserSuspendedError } from "@/features/users/server/user.service";
+import { UserNotFoundError } from "@/features/users/server/user.queries";
 import type { Mission, MissionStatus } from "@/features/missions/mission.types";
-import type { OpenMissionQuery } from "@/features/missions/mission.queries";
+import type { OpenMissionQuery } from "@/features/missions/server/mission.queries";
 
 /**
  * Vitest suite for `mission.service.ts`.
@@ -70,7 +70,7 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 };
-vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/server/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 /**
  * The stand-in for the handle Drizzle passes a `db.transaction` callback. The
@@ -92,13 +92,13 @@ vi.mock("@/db/client", () => ({
 
 const findBidsMock = vi.fn();
 const saveBidMock = vi.fn();
-vi.mock("@/features/bids/bid.queries", () => ({
+vi.mock("@/features/bids/server/bid.queries", () => ({
   findByMissionOrderByCreatedAtDesc: (...args: unknown[]) => findBidsMock(...args),
   save: (...args: unknown[]) => saveBidMock(...args),
 }));
 
 const createNotificationMock = vi.fn();
-vi.mock("@/features/notifications/notification.service", () => ({
+vi.mock("@/features/notifications/server/notification.service", () => ({
   create: (...args: unknown[]) => createNotificationMock(...args),
 }));
 
@@ -114,8 +114,8 @@ vi.mock("@/lib/email/email.service", () => ({
 
 const findUserByIdMock = vi.fn();
 const findUserByIdOrUndefinedMock = vi.fn();
-vi.mock("@/features/users/user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
+vi.mock("@/features/users/server/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.queries")>();
   return {
     ...actual,
     findById: (...args: unknown[]) => findUserByIdMock(...args),
@@ -150,7 +150,7 @@ import {
   unhide,
   update,
   type MissionDraft,
-} from "@/features/missions/mission.service";
+} from "@/features/missions/server/mission.service";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

@@ -39,8 +39,8 @@ import type { AuditLog } from "@/features/audit/audit.types";
  */
 
 const searchMock = vi.fn();
-vi.mock("@/features/audit/audit.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/audit/audit.service")>();
+vi.mock("@/features/audit/server/audit.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/audit/server/audit.service")>();
   return { ...actual, search: (...args: unknown[]) => searchMock(...args) };
 });
 

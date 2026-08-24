@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
-import { withdraw } from "@/features/bids/bid.service";
+import { withdraw } from "@/features/bids/server/bid.service";
 
 /**
  * `DELETE /api/v1/bids/{id}` — withdraw the calling pilot's pending bid

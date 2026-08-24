@@ -4,7 +4,7 @@ import { closeDb, getDb } from "@/db/client";
 import { auditLog, bid, mission, notification, rating, users } from "@/db/schema";
 import { USER_ID_HEADER, USER_ROLE_HEADER } from "@/lib/auth/guards";
 import type { UserRole } from "@/db/schema";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import { POST as registerRoute } from "@/app/api/v1/auth/register/route";
 import { POST as placeBidRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
 import { POST as acceptBidRoute } from "@/app/api/v1/bids/[id]/accept/route";

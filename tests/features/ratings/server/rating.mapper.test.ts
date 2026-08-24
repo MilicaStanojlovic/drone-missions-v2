@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toRatingResponse, toUserRatingsResponse } from "@/features/ratings/rating.mapper";
+import { toRatingResponse, toUserRatingsResponse } from "@/features/ratings/server/rating.mapper";
 import type { Rating } from "@/features/ratings/rating.types";
 
 /**

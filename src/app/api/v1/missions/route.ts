@@ -6,9 +6,9 @@ import {
   loadMissionResponses,
   toMissionDraft,
   type MissionResponse,
-} from "@/features/missions/mission.mapper";
-import { missionRequestSchema, openMissionQuerySchema } from "@/features/missions/mission.schema";
-import { create, findOpen } from "@/features/missions/mission.service";
+} from "@/features/missions/server/mission.mapper";
+import { missionRequestSchema, openMissionQuerySchema } from "@/features/missions/server/mission.schema";
+import { create, findOpen } from "@/features/missions/server/mission.service";
 
 /**
  * `POST /api/v1/missions` + `GET /api/v1/missions` (replace

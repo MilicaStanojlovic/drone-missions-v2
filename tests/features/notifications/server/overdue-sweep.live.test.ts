@@ -49,8 +49,8 @@ import type { Mission, MissionStatus } from "@/features/missions/mission.types";
  */
 const scope = vi.hoisted(() => ({ missionIds: new Set<number>() }));
 
-vi.mock("@/features/missions/mission.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/missions/mission.queries")>();
+vi.mock("@/features/missions/server/mission.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/missions/server/mission.queries")>();
   return {
     ...actual,
     findOverdue: async (statuses: readonly MissionStatus[], endedBefore: Date) => {
@@ -68,7 +68,7 @@ import { closeDb, getDb } from "@/db/client";
 import { mission, notification, users } from "@/db/schema";
 import { emailService } from "@/lib/email/email.service";
 import { logger } from "@/lib/logger";
-import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/server/overdue-sweep";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 

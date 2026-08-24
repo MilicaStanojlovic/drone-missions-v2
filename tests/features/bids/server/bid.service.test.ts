@@ -3,9 +3,9 @@ import type { Mission } from "@/features/missions/mission.types";
 import {
   MissionAccessDeniedError,
   MissionNotFoundError,
-} from "@/features/missions/mission.service";
-import { UserNotFoundError } from "@/features/users/user.queries";
-import { UserSuspendedError } from "@/features/users/user.service";
+} from "@/features/missions/server/mission.service";
+import { UserNotFoundError } from "@/features/users/server/user.queries";
+import { UserSuspendedError } from "@/features/users/server/user.service";
 import type { User } from "@/features/users/user.types";
 import type { Bid } from "@/features/bids/bid.types";
 
@@ -62,7 +62,7 @@ const queriesMock = {
   save: vi.fn(),
   deleteBid: vi.fn(),
 };
-vi.mock("@/features/bids/bid.queries", () => ({
+vi.mock("@/features/bids/server/bid.queries", () => ({
   findById: (...args: unknown[]) => queriesMock.findById(...args),
   findByMissionAndPilot: (...args: unknown[]) => queriesMock.findByMissionAndPilot(...args),
   findByMissionAndStatus: (...args: unknown[]) => queriesMock.findByMissionAndStatus(...args),
@@ -85,7 +85,7 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 };
-vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/server/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 /**
  * The stand-in for the handle Drizzle passes a `db.transaction` callback. The
@@ -101,8 +101,8 @@ vi.mock("@/db/client", () => ({
 
 const findUserByIdMock = vi.fn();
 const findUserByIdOrUndefinedMock = vi.fn();
-vi.mock("@/features/users/user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
+vi.mock("@/features/users/server/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.queries")>();
   return {
     ...actual,
     findById: (...args: unknown[]) => findUserByIdMock(...args),
@@ -111,7 +111,7 @@ vi.mock("@/features/users/user.queries", async (importOriginal) => {
 });
 
 const createNotificationMock = vi.fn();
-vi.mock("@/features/notifications/notification.service", () => ({
+vi.mock("@/features/notifications/server/notification.service", () => ({
   create: (...args: unknown[]) => createNotificationMock(...args),
 }));
 
@@ -142,7 +142,7 @@ import {
   myBids,
   place,
   withdraw,
-} from "@/features/bids/bid.service";
+} from "@/features/bids/server/bid.service";
 
 /** The Java test's `user(id, suspended)` helper, with the columns this port has. */
 function fakeUser(id: number, suspended: boolean, overrides: Partial<User> = {}): User {

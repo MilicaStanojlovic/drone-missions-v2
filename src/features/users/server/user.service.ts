@@ -1,10 +1,10 @@
 import "server-only";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import type { UserRole } from "@/db/schema";
 import type { Page, PageRequest } from "@/lib/api/paging";
 import { record, userReactivated, userSuspended } from "@/lib/audit";
 import { ConflictError, ForbiddenError } from "@/lib/errors";
-import { findById as findUserById, search as searchUsers, setSuspended } from "@/features/users/user.queries";
+import { findById as findUserById, search as searchUsers, setSuspended } from "@/features/users/server/user.queries";
 import type { User } from "@/features/users/user.types";
 
 /**

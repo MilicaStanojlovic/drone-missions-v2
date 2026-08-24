@@ -42,8 +42,8 @@ const listForMissionMock = vi.fn();
 const myBidsMock = vi.fn();
 const withdrawMock = vi.fn();
 const acceptMock = vi.fn();
-vi.mock("@/features/bids/bid.service", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/bids/bid.service")>();
+vi.mock("@/features/bids/server/bid.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/bids/server/bid.service")>();
   return {
     ...actual,
     place: (...args: unknown[]) => placeMock(...args),
@@ -57,12 +57,12 @@ vi.mock("@/features/bids/bid.service", async (importOriginal) => {
 // `vi.mock` calls are hoisted by Vitest, so these already resolve against the
 // mocked service module (the two error classes come off `importOriginal`, so
 // they are the real ones the handlers will see).
-import { BidConflictError, BidNotFoundError } from "@/features/bids/bid.service";
+import { BidConflictError, BidNotFoundError } from "@/features/bids/server/bid.service";
 import {
   MissionAccessDeniedError,
   MissionNotFoundError,
-} from "@/features/missions/mission.service";
-import { UserSuspendedError } from "@/features/users/user.service";
+} from "@/features/missions/server/mission.service";
+import { UserSuspendedError } from "@/features/users/server/user.service";
 import { GET as listRoute, POST as placeRoute } from "@/app/api/v1/bids/mission/[missionId]/route";
 import { GET as myBidsRoute } from "@/app/api/v1/bids/my/route";
 import { DELETE as withdrawRoute } from "@/app/api/v1/bids/[id]/route";

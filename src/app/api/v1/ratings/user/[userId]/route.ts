@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
-import { toUserRatingsResponse, type UserRatingsResponse } from "@/features/ratings/rating.mapper";
-import { receivedBy, summaryFor } from "@/features/ratings/rating.service";
+import { toUserRatingsResponse, type UserRatingsResponse } from "@/features/ratings/server/rating.mapper";
+import { receivedBy, summaryFor } from "@/features/ratings/server/rating.service";
 
 /**
  * `GET /api/v1/ratings/user/{userId}` (replaces `RatingController.forUser`).

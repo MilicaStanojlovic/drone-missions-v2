@@ -1,7 +1,7 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
 import type { PagedModel } from "@/lib/api/paging";
-import type { MissionResponse } from "@/features/missions/mission.mapper";
+import type { MissionResponse } from "@/features/missions/server/mission.mapper";
 import type { Geofence, MissionStatus, Waypoint, WaypointAction } from "@/features/missions/mission.types";
 
 /**

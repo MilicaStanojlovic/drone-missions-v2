@@ -27,7 +27,7 @@ import type { NewUser, User } from "@/features/users/user.types";
 const existsByEmailMock = vi.fn();
 const insertUserMock = vi.fn();
 const findByEmailMock = vi.fn();
-vi.mock("@/features/users/user.queries", () => ({
+vi.mock("@/features/users/server/user.queries", () => ({
   existsByEmail: (...args: unknown[]) => existsByEmailMock(...args),
   insertUser: (...args: unknown[]) => insertUserMock(...args),
   findByEmail: (...args: unknown[]) => findByEmailMock(...args),
@@ -60,7 +60,7 @@ import {
   EmailAlreadyExistsError,
   InvalidCredentialsError,
   login,
-} from "@/features/auth/auth.service";
+} from "@/features/auth/server/auth.service";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {

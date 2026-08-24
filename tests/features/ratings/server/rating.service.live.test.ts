@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { closeDb, getDb } from "@/db/client";
 import { auditLog, mission, rating, users } from "@/db/schema";
-import { getMissionDao } from "@/features/missions/mission.cache";
+import { getMissionDao } from "@/features/missions/server/mission.cache";
 import {
   AlreadyRatedError,
   NotMissionParticipantError,
@@ -10,7 +10,7 @@ import {
   create,
   forMission,
   receivedBy,
-} from "@/features/ratings/rating.service";
+} from "@/features/ratings/server/rating.service";
 
 /**
  * Live-DB round-trip for `rating.service.ts` — the half `rating.service.test.ts`

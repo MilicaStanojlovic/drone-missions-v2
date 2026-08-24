@@ -51,18 +51,18 @@ const daoMock = {
   save: vi.fn(),
   delete: vi.fn(),
 };
-vi.mock("@/features/missions/mission.cache", () => ({ getMissionDao: () => daoMock }));
+vi.mock("@/features/missions/server/mission.cache", () => ({ getMissionDao: () => daoMock }));
 
 const createNotificationMock = vi.fn();
 const overdueExistsMock = vi.fn();
-vi.mock("@/features/notifications/notification.service", () => ({
+vi.mock("@/features/notifications/server/notification.service", () => ({
   create: (...args: unknown[]) => createNotificationMock(...args),
   overdueExists: (...args: unknown[]) => overdueExistsMock(...args),
 }));
 
 const findUserByIdOrUndefinedMock = vi.fn();
-vi.mock("@/features/users/user.queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/features/users/user.queries")>();
+vi.mock("@/features/users/server/user.queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/users/server/user.queries")>();
   return {
     ...actual,
     findByIdOrUndefined: (...args: unknown[]) => findUserByIdOrUndefinedMock(...args),
@@ -82,7 +82,7 @@ vi.mock("@/lib/email/email.service", () => ({
 // `vi.mock` calls above are hoisted by Vitest, so these static imports already
 // resolve against the mocked modules.
 import { logger } from "@/lib/logger";
-import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/server/overdue-sweep";
 
 function fakeUser(overrides: Partial<User> = {}): User {
   return {
