@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
 import { mapPage, parsePageRequest, toPagedModel, type PagedModel } from "@/lib/api/paging";
-import { toAuditLogResponse } from "@/features/audit/audit.mapper";
-import { auditLogQuerySchema } from "@/features/audit/audit.schema";
-import { search } from "@/features/audit/audit.service";
+import { toAuditLogResponse } from "@/features/audit/server/audit.mapper";
+import { auditLogQuerySchema } from "@/features/audit/server/audit.schema";
+import { search } from "@/features/audit/server/audit.service";
 import type { AuditLogResponse } from "@/features/audit/audit.types";
 
 /**

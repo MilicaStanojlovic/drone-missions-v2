@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { unreadCount } from "@/features/notifications/notification.service";
+import { unreadCount } from "@/features/notifications/server/notification.service";
 
 /**
  * `GET /api/v1/notifications/unread-count` — the caller's unread count, for

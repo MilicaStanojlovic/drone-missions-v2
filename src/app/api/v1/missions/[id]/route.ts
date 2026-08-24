@@ -6,9 +6,9 @@ import {
   loadMissionResponse,
   toMissionDraft,
   type MissionResponse,
-} from "@/features/missions/mission.mapper";
-import { missionRequestSchema } from "@/features/missions/mission.schema";
-import { deleteMission, findById, update } from "@/features/missions/mission.service";
+} from "@/features/missions/server/mission.mapper";
+import { missionRequestSchema } from "@/features/missions/server/mission.schema";
+import { deleteMission, findById, update } from "@/features/missions/server/mission.service";
 
 /**
  * `GET` / `PUT` / `DELETE /api/v1/missions/{id}` (replace

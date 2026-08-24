@@ -2,7 +2,7 @@ import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
 import type { PagedModel } from "@/lib/api/paging";
 import type { AuditAction, AuditActorRole, UserRole } from "@/db/schema";
-import type { AuditLogResponse } from "./audit.types";
+import type { AuditLogResponse } from "@/features/audit/audit.types";
 
 /**
  * Client-side audit access: the browser-facing mirror of the audit feature.

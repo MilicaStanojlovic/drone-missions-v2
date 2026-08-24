@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
 import { parsePageRequest, toPagedModel, type PagedModel } from "@/lib/api/paging";
-import { loadMissionResponses, type MissionResponse } from "@/features/missions/mission.mapper";
-import { searchAll } from "@/features/missions/mission.service";
+import { loadMissionResponses, type MissionResponse } from "@/features/missions/server/mission.mapper";
+import { searchAll } from "@/features/missions/server/mission.service";
 
 /**
  * `GET /api/v1/missions/all` — the admin moderation listing (replaces

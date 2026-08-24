@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { listFor } from "@/features/notifications/notification.service";
-import { toNotificationResponse } from "@/features/notifications/notification.mapper";
+import { listFor } from "@/features/notifications/server/notification.service";
+import { toNotificationResponse } from "@/features/notifications/server/notification.mapper";
 import type { NotificationResponse } from "@/features/notifications/notification.types";
 
 /**

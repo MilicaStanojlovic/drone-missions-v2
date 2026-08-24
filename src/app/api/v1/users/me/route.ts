@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { findById } from "@/features/users/user.service";
-import { toUserResponse } from "@/features/users/user.mapper";
+import { findById } from "@/features/users/server/user.service";
+import { toUserResponse } from "@/features/users/server/user.mapper";
 import type { UserResponse } from "@/features/users/user.types";
 
 /**

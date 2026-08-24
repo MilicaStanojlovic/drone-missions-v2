@@ -1,4 +1,4 @@
-import type { GeoPoint, Geofence } from "./mission.types";
+import type { GeoPoint, Geofence } from "@/features/missions/mission.types";
 
 /**
  * Geographic helpers for flight plans — real lat/lng math (haversine), with no

@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { toRatingResponse, type RatingResponse } from "@/features/ratings/rating.mapper";
-import { ratingRequestSchema } from "@/features/ratings/rating.schema";
-import { create, forMission } from "@/features/ratings/rating.service";
+import { toRatingResponse, type RatingResponse } from "@/features/ratings/server/rating.mapper";
+import { ratingRequestSchema } from "@/features/ratings/server/rating.schema";
+import { create, forMission } from "@/features/ratings/server/rating.service";
 
 /**
  * `POST` / `GET /api/v1/ratings/mission/{missionId}` (replace

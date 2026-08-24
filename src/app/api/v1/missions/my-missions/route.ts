@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { loadMissionResponses, type MissionResponse } from "@/features/missions/mission.mapper";
-import { findOwnedBy } from "@/features/missions/mission.service";
+import { loadMissionResponses, type MissionResponse } from "@/features/missions/server/mission.mapper";
+import { findOwnedBy } from "@/features/missions/server/mission.service";
 
 /**
  * `GET /api/v1/missions/my-missions` (replaces `MissionController.findMine`).

@@ -1,5 +1,5 @@
 import { closeDb } from "@/db/client";
-import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/server/overdue-sweep";
 
 /**
  * One-shot, out-of-band trigger for the overdue sweep.

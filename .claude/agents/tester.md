@@ -17,8 +17,9 @@ read-only reference). You run checks; you **never edit files**.
 2. Read the phase's section of `MIGRATION_PLAN.md` (§7) — its **"Done when"** line is your
    acceptance criteria — plus the phase's `plans/PLAN-<phase>.md` checklist.
 3. Static checks: `pnpm exec tsc --noEmit`, then `pnpm exec eslint .`.
-4. Unit/integration: run the Vitest suites for the touched features
-   (`pnpm exec vitest run <paths>`); run the full Vitest suite if it's fast (< a few minutes).
+4. Unit/integration: run the Vitest suites for the touched features — they live under `tests/`
+   mirroring `src/`, so e.g. `pnpm exec vitest run tests/features/missions tests/app/api/v1/missions`;
+   run the full Vitest suite if it's fast (< a few minutes).
 5. Schema drift: `pnpm exec drizzle-kit check` — skip with an explicit note if no database is
    reachable or the config isn't wired yet.
 6. E2E (best effort): if a Playwright spec exists for this phase, run it

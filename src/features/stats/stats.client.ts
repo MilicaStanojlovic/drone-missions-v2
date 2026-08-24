@@ -1,6 +1,6 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
-import type { PlatformStats } from "./stats.types";
+import type { PlatformStats } from "@/features/stats/stats.types";
 
 /**
  * Client-side platform-stats access: the one snapshot call the admin overview
@@ -39,7 +39,7 @@ import type { PlatformStats } from "./stats.types";
  * response is typed by the server declaration rather than a transcription of
  * it. Mirrors the Angular `stats.model.ts` pair.
  */
-export type { PlatformStats, TopMission } from "./stats.types";
+export type { PlatformStats, TopMission } from "@/features/stats/stats.types";
 
 /** One snapshot of the platform counts (admin-only endpoint). Ports `getOverview`. */
 export async function fetchPlatformStats(): Promise<PlatformStats> {

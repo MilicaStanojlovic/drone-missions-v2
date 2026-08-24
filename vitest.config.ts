@@ -5,7 +5,7 @@ import path from "node:path";
 
 /**
  * Reads `.env.local`/`.env` (Vite's own loader, the same files
- * `next dev`/`next build` read) so live-DB suites — `src/lib/audit.test.ts`
+ * `next dev`/`next build` read) so live-DB suites — `tests/lib/audit.test.ts`
  * and the ones later phases add — can pick up a real `DATABASE_URL` when a
  * developer has one configured (e.g. `docker compose up db` +
  * `.env.local` per `MIGRATION_PLAN.md` §8) and fall back to their
@@ -42,7 +42,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     exclude: ["node_modules/**", ".next/**", "e2e/**"],
     env: {
       // Dummy, test-only value satisfying src/lib/env.ts's required

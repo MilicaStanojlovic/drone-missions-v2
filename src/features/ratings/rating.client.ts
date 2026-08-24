@@ -1,6 +1,6 @@
 import { apiFetch } from "@/features/auth/auth.client";
 import { ensureOk } from "@/lib/api/client";
-import type { RatingResponse, UserRatingsResponse } from "./rating.mapper";
+import type { RatingResponse, UserRatingsResponse } from "@/features/ratings/server/rating.mapper";
 
 /**
  * Client-side rating access: the browser-facing mirror of the ratings feature.

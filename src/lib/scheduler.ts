@@ -1,6 +1,6 @@
 import "server-only";
 import { schedule, type ScheduledTask } from "node-cron";
-import { runOverdueSweep } from "@/features/notifications/overdue-sweep";
+import { runOverdueSweep } from "@/features/notifications/server/overdue-sweep";
 import { logger } from "@/lib/logger";
 
 /**

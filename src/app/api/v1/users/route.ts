@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { getCurrentUser, requireRole } from "@/lib/auth/guards";
 import { mapPage, parsePageRequest, toPagedModel, type PagedModel } from "@/lib/api/paging";
-import { toUserResponse } from "@/features/users/user.mapper";
-import { userListQuerySchema } from "@/features/users/user.schema";
-import { search } from "@/features/users/user.service";
+import { toUserResponse } from "@/features/users/server/user.mapper";
+import { userListQuerySchema } from "@/features/users/server/user.schema";
+import { search } from "@/features/users/server/user.service";
 import type { UserResponse } from "@/features/users/user.types";
 
 /**
