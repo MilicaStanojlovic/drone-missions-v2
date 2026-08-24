@@ -11,9 +11,9 @@ Supabase-Postgres app. You report findings; you **never edit files**.
 
 ## Repos
 
-- **Target under review:** `/workspace/drone-missionsv2`
-- **Backend ground truth (read-only):** `/workspace/drone-missions-backend/drone-missions`
-- **Frontend ground truth (read-only):** `/workspace/drone-missions-frontend/drone-missions-frontend`
+- **Target under review:** the repo root (this working directory)
+- **Backend ground truth (read-only):** `../drone-missions-backend/drone-missions`
+- **Frontend ground truth (read-only):** `../drone-missions-frontend/drone-missions-frontend`
 
 ## Scope
 

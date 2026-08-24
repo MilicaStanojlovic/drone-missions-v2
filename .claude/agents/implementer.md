@@ -12,9 +12,9 @@ invocation**; you never look ahead to later tasks.
 
 ## Repos
 
-- **Target (READ + WRITE):** `/workspace/drone-missionsv2` — the new app. You write here ONLY.
-- **Backend source (READ ONLY):** `/workspace/drone-missions-backend/drone-missions` — Spring Boot ground truth.
-- **Frontend source (READ ONLY):** `/workspace/drone-missions-frontend/drone-missions-frontend` — Angular ground truth.
+- **Target (READ + WRITE):** the repo root (this working directory) — the new app. You write here ONLY.
+- **Backend source (READ ONLY):** `../drone-missions-backend/drone-missions` — Spring Boot ground truth.
+- **Frontend source (READ ONLY):** `../drone-missions-frontend/drone-missions-frontend` — Angular ground truth.
 
 Never create, edit, delete, or run mutating commands against the two source repos. They are
 reference material. Permission rules also enforce this.

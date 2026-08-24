@@ -15,9 +15,9 @@ export const meta = {
 
 // args.target lets a phase run in a separate git worktree of this repo (parallel phases).
 const TARGET =
-  (args && typeof args === "object" && args.target ? String(args.target) : "/workspace/drone-missionsv2").replace(/\/+$/, "");
-const BACKEND = "/workspace/drone-missions-backend/drone-missions";
-const FRONTEND = "/workspace/drone-missions-frontend/drone-missions-frontend";
+  (args && typeof args === "object" && args.target ? String(args.target) : ".").replace(/\/+$/, "");
+const BACKEND = "../drone-missions-backend/drone-missions";
+const FRONTEND = "../drone-missions-frontend/drone-missions-frontend";
 
 const TASKS_SCHEMA = {
   type: "object",

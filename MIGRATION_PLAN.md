@@ -171,9 +171,9 @@ phase list below already follows this (each phase = one vertical).
 **Sandbox layout — read the source, write the target.**
 
 ```
-C:\workspace\drone-missionsv2      ← rw   the new Next.js app — agents WRITE here ONLY
-…\drone-missions-backend                       ← ro   Spring source of truth — READ only
-…\drone-missions-frontend                      ← ro   React/Angular source of truth — READ only
+.                             ← rw   the new Next.js app — agents WRITE here ONLY
+../drone-missions-backend     ← ro   Spring source of truth — READ only
+../drone-missions-frontend    ← ro   React/Angular source of truth — READ only
 ```
 
 Every agent may **READ all three**; every agent **WRITES only to the first**. Enforce read-only on

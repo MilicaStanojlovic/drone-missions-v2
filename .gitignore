@@ -45,3 +45,6 @@ Thumbs.db
 
 # per-phase working plans (checked-off records stay local)
 plans/
+
+# machine-specific Claude Code overrides (agents/ and workflows/ ARE shared)
+.claude/settings.local.json
