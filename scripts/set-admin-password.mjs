@@ -1,8 +1,9 @@
-// Sets (resets) the seeded admin account's password to one you choose, so you
-// can log in as ADMIN. The V12 migration seeds `admin@drone-missions.local`
-// with a throwaway dev hash whose plaintext is not recorded anywhere; this
-// script replaces that hash with the bcrypt of a password you supply, using
-// the exact same hashing the app's auth uses (bcryptjs, cost 10).
+// Sets an ADMIN account's password to one you choose, so you can log in as
+// ADMIN. V12 no longer seeds an admin (it only widens the role CHECK to accept
+// ADMIN), so create the admin row out of band first — insert a user with
+// role = 'ADMIN' and email = admin@drone-missions.local (or pass ADMIN_EMAIL) —
+// then run this to set its password, using the exact same hashing the app's
+// auth uses (bcryptjs, cost 10).
 //
 // Usage:
 //   node scripts/set-admin-password.mjs "your-new-password"
