@@ -23,9 +23,10 @@ import type { Bid } from "@/features/bids/bid.types";
  * Bid business logic (replaces `business.service.bid.BidService`).
  *
  * All five methods: `place`, `listForMission`, `myBids`, `withdraw` and
- * `accept`. `accept` is the only one that notifies — `place` sends an email
- * but raises no in-app notification (see below) — and the only one that
- * writes more than one row, hence the only `db.transaction` here.
+ * `accept`. Both `place` and `accept` notify — `place` tells the designer a
+ * bid arrived (a deliberate addition to the source, see below), `accept` tells
+ * the pilots how it was decided — but `accept` is the only one that writes
+ * more than one row, hence the only `db.transaction` here.
  *
  * Two source details this port keeps exactly, because both are load-bearing:
  *
@@ -158,13 +159,25 @@ export async function place(
     await getMissionDao().save({ ...mission, status: "BIDDING" });
   }
 
-  // Let the mission's owner know a bid came in (best-effort email — the port
-  // never rejects, mirroring the source's `@Async void` send). The source
-  // sends NO in-app notification on place; only `accept` below creates
-  // notifications, so none is created here.
+  // Let the mission's owner know a bid came in, on both channels.
+  //
+  // DELIBERATE ADDITION: the source raises no in-app notification here — it
+  // sends the email alone, so a designer who is signed in but not watching
+  // their inbox learns nothing. The notification below gives the designer the
+  // same in-app signal a pilot already gets for every event that concerns
+  // them; it is the only notification in the app aimed at a designer, and the
+  // reason `NotificationType` carries a NEW_BID member the Java enum does not.
   const designer = mission.designer;
   const pilotName = pilot.username;
   if (designer !== null) {
+    // Same `mission.name ?? ""` fallback as the email call below: `name` is
+    // nullable in this schema, and an unnamed mission renders as an empty
+    // slot in the copy rather than the string "null".
+    await createNotification(
+      NewNotification.newBid(designer.id, { id: mission.id, name: mission.name ?? "" }, pilotName),
+    );
+    // Best-effort email — the port never rejects, mirroring the source's
+    // `@Async void` send.
     await emailService.sendNewBid({
       designer: { email: designer.email, username: designer.username },
       // `mission.name` is nullable in this schema while the mail port takes a

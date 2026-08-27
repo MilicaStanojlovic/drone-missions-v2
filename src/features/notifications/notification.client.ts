@@ -15,9 +15,10 @@ import type { NotificationType } from "@/db/schema";
  * layer in this stack, so the same lifecycle is expressed as a hook owned by
  * the one component that consumes it (`components/notification-bell.tsx`):
  * mount = the profile arrived, unmount = signed out or left the authenticated
- * shell, and the effect cleanup is what `stopPolling()` did. The pilot-only
- * gate survives verbatim as `isPilot()` below, checked both before the first
- * load and inside every poll tick, exactly as `refresh()` does in the source.
+ * shell, and the effect cleanup is what `stopPolling()` did. The source's
+ * pilot-only gate survives as `canReceiveNotifications()` below — widened to
+ * designers, who now receive NEW_BID — checked both before the first load and
+ * inside every poll tick, exactly as `refresh()` does in the source.
  *
  * `import type` for `NotificationType` is erased at compile time, so this
  * module never pulls `@/db/schema` (and `drizzle-orm/pg-core`) into the client
@@ -59,6 +60,10 @@ export const NOTIFICATION_COLORS: Record<NotificationType, string> = {
   BID_REJECTED: "#e04a3f",
   MISSION_OVERDUE: "#d9860a",
   MISSION_CANCELLED: "#e04a3f",
+  // Not in the source map either — NEW_BID is this port's addition. It takes
+  // the canvas primary / designer role accent (`--role-designer`), since the
+  // designer is the only recipient.
+  NEW_BID: "#2f6bff",
 };
 
 /**
@@ -89,12 +94,23 @@ const POLL_MS = 45_000;
 const BASE_URL = "/api/v1/notifications";
 
 /**
- * Whether the current session is a signed-in pilot — the port of
- * `AuthService.isPilot` (`this.role === 'PILOT'`) plus the source's
- * `profile$` truthiness check, both read straight off the stored JWT.
+ * Whether the current session belongs to someone who can hold notifications.
+ *
+ * A considered divergence from the source, not a port: `AuthService.isPilot`
+ * gates the Angular service (`this.role === 'PILOT'`) because every one of the
+ * four source notification types targets a pilot. This port adds NEW_BID for
+ * designers, so the gate widens to both roles.
+ *
+ * Deliberately NOT a bare `isLoggedIn()`: nothing targets an ADMIN, so an
+ * admin session would poll every 45s forever for a list that is always empty.
+ * The truthiness half of the source's `profile$` check is kept as `isLoggedIn`.
  */
-function isPilot(): boolean {
-  return isLoggedIn() && getRole() === "PILOT";
+function canReceiveNotifications(): boolean {
+  if (!isLoggedIn()) {
+    return false;
+  }
+  const role = getRole();
+  return role === "PILOT" || role === "DESIGNER";
 }
 
 /** What {@link useNotifications} hands its consumer. */
@@ -112,12 +128,14 @@ export interface UseNotifications {
 }
 
 /**
- * Loads and polls the signed-in pilot's notifications.
+ * Loads and polls the signed-in pilot's or designer's notifications.
  *
- * Lifecycle parity with the source: the list is fetched once when a pilot is
- * present and re-fetched every 45s; a non-pilot (or signed-out) session holds
- * an empty list and never polls, which is the `subject.next([])` +
- * `stopPolling()` branch of the source's `profile$` subscription.
+ * Lifecycle parity with the source: the list is fetched once when such a
+ * profile is present and re-fetched every 45s; any other (or signed-out)
+ * session holds an empty list and never polls, which is the
+ * `subject.next([])` + `stopPolling()` branch of the source's `profile$`
+ * subscription. See {@link canReceiveNotifications} for why an admin falls in
+ * the second group.
  */
 export function useNotifications(): UseNotifications {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -130,7 +148,7 @@ export function useNotifications(): UseNotifications {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const refresh = useCallback(() => {
-    if (!isPilot()) {
+    if (!canReceiveNotifications()) {
       return;
     }
     apiFetch(BASE_URL)
@@ -146,7 +164,7 @@ export function useNotifications(): UseNotifications {
   }, []);
 
   useEffect(() => {
-    if (!isPilot()) {
+    if (!canReceiveNotifications()) {
       setNotifications([]);
       return;
     }

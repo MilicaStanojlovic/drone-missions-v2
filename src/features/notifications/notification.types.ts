@@ -110,6 +110,30 @@ export const NewNotification = {
     };
   },
 
+  /**
+   * A pilot bid on this designer's mission.
+   *
+   * The only factory here that targets a DESIGNER rather than a pilot, and the
+   * only one with no counterpart in the source: `BidService.place` tells the
+   * designer by email (`sendNewBid`) and raises no in-app notification, so
+   * there is no `NewNotification.newBid` in the Java record.
+   *
+   * The wording deliberately mirrors `src/emails/new-bid.tsx` so the two
+   * channels read alike — the email's eyebrow is the title, its heading
+   * sentence the message. The bid amount is left out: the email renders it
+   * through a formatted currency component and this app has no currency
+   * formatter, so interpolating a bare number here would invent a format.
+   */
+  newBid(designerId: number, mission: NotificationMission, pilotName: string): NewNotification {
+    return {
+      userId: designerId,
+      type: "NEW_BID",
+      title: "New bid",
+      message: `${pilotName} placed a bid on "${mission.name}".`,
+      mission,
+    };
+  },
+
   /** The awarded mission's flight window has passed without being marked finished. */
   missionOverdue(pilotId: number, mission: NotificationMission): NewNotification {
     return {

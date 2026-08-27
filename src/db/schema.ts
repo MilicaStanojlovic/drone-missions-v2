@@ -95,14 +95,23 @@ export const USER_ROLES: UserRole[] = ["DESIGNER", "PILOT", "ADMIN"];
 export type BidStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 export const BID_STATUSES: BidStatus[] = ["PENDING", "ACCEPTED", "REJECTED"];
 
-/** `notification_type_check` (V9, widened by V10 to add MISSION_CANCELLED). */
+/**
+ * `notification_type_check` (V9, widened by V10 to add MISSION_CANCELLED and by
+ * V19 to add NEW_BID).
+ *
+ * NEW_BID has no counterpart in the Java `NotificationType` enum: the source
+ * tells a designer about a new bid by email alone. It is added here so the
+ * designer gets the same in-app signal the pilot already has for every event
+ * that concerns them.
+ */
 export type NotificationType =
-  "BID_ACCEPTED" | "BID_REJECTED" | "MISSION_OVERDUE" | "MISSION_CANCELLED";
+  "BID_ACCEPTED" | "BID_REJECTED" | "MISSION_OVERDUE" | "MISSION_CANCELLED" | "NEW_BID";
 export const NOTIFICATION_TYPES: NotificationType[] = [
   "BID_ACCEPTED",
   "BID_REJECTED",
   "MISSION_OVERDUE",
   "MISSION_CANCELLED",
+  "NEW_BID",
 ];
 
 /** `audit_log_actor_role_check` (V14) — same domain as UserRole, kept separate per-column. */
