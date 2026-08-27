@@ -18,7 +18,10 @@ import postgres from "postgres";
  *   while unread, "You're all caught up." empty state, `onSelect`'s
  *   markRead + navigate (`/missions/{id}`, or `/missions` for BID_REJECTED).
  * - drone-missions-frontend/.../app.component.html — `@if (auth.isPilot)`
- *   around `<app-notification-bell />`, i.e. designers get no bell at all.
+ *   around `<app-notification-bell />`. This port diverges: NEW_BID is aimed
+ *   at designers, so the gate widened to PILOT *or* DESIGNER
+ *   (`canReceiveNotifications()`), and the last test below covers the
+ *   designer's bell rather than asserting its absence.
  * - drone-missions-backend/.../web/controller/notification/NotificationController.java
  *   — the `/unread-count` figure this spec cross-checks the badge against, so
  *   a passing badge assertion also proves the read actually persisted rather
@@ -113,16 +116,18 @@ test.describe("Phase 4 notifications happy path (live DB)", () => {
   }
 
   async function seedNotification(values: {
-    type: "BID_ACCEPTED" | "BID_REJECTED" | "MISSION_OVERDUE" | "MISSION_CANCELLED";
+    type: "BID_ACCEPTED" | "BID_REJECTED" | "MISSION_OVERDUE" | "MISSION_CANCELLED" | "NEW_BID";
     title: string;
     message: string;
     createdAt: Date;
     readAt?: Date | null;
+    /** Recipient; defaults to the pilot, who owns every row but the NEW_BID. */
+    userId?: number;
   }) {
     const now = new Date();
     await sql`
       insert into notification (user_id, type, title, message, mission_id, read_at, created_at, updated_at)
-      values (${pilotId}, ${values.type}, ${values.title}, ${values.message}, ${missionId},
+      values (${values.userId ?? pilotId}, ${values.type}, ${values.title}, ${values.message}, ${missionId},
               ${values.readAt ?? null}, ${values.createdAt}, ${now})
     `;
   }
@@ -362,13 +367,42 @@ test.describe("Phase 4 notifications happy path (live DB)", () => {
     await expect.poll(() => serverUnreadCount(page)).toBe(0);
   });
 
-  test("a designer never sees the bell", async ({ page }) => {
+  test("a designer is told when a bid lands on their mission", async ({ page }) => {
+    // DELIBERATE DIVERGENCE from the source, which gates the bell behind
+    // `@if (auth.isPilot)` and tells a designer about a new bid by email
+    // alone. NEW_BID is this port's addition, so the designer has a bell too.
+    await seedNotification({
+      userId: designerId,
+      type: "NEW_BID",
+      title: "New bid",
+      message: `${pilot.username} placed a bid on "${missionName}".`,
+      createdAt: new Date(),
+    });
+
     await signIn(page, designer, /\/missions\/mine$/);
 
-    // The shell really did mount for them (profile chip is rendered) — so the
-    // bell's absence is the `@if (auth.isPilot)` gate, not an unrendered page.
+    // The shell really did mount for them (profile chip is rendered), so a
+    // bell assertion below is about the role gate and not an unrendered page.
     await expect(page.getByText(designer.username, { exact: true })).toBeVisible();
     await expect(page.getByText("Mission Designer", { exact: true })).toBeVisible();
-    await expect(bell(page)).toHaveCount(0);
+
+    await expect(bell(page)).toBeVisible();
+    await expect(badge(page)).toHaveText("1");
+    // Cross-checked against the server, so this proves the row is really
+    // scoped to the designer rather than leaking the pilot's list.
+    expect(await serverUnreadCount(page)).toBe(1);
+
+    await bell(page).click();
+    await expect(page.getByText("New bid", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(`${pilot.username} placed a bid on "${missionName}".`, { exact: true }),
+    ).toBeVisible();
+
+    // The designer owns this mission, so the row opens it rather than
+    // bouncing to the feed the way a BID_REJECTED does for a pilot.
+    await page.getByRole("button", { name: /ago$/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/missions/${missionId}$`));
+    await expect.poll(() => serverUnreadCount(page)).toBe(0);
   });
+
 });

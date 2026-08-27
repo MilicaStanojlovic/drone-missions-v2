@@ -103,3 +103,75 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/*
+ * Drone animation for the 404 page (`app/not-found.tsx`). Kept here rather
+ * than inline because `@keyframes` cannot be expressed as Tailwind utilities
+ * and the page is the only consumer.
+ *
+ * The craft bobs while its four props spin; the ground shadow breathes in
+ * counter-phase (widest and darkest when the drone is lowest) so the bob
+ * reads as altitude rather than as the whole illustration sliding.
+ */
+@keyframes drone-bob {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@keyframes drone-shadow {
+  0%,
+  100% {
+    transform: scaleX(0.88);
+    opacity: 0.16;
+  }
+  50% {
+    transform: scaleX(1.06);
+    opacity: 0.3;
+  }
+}
+
+@keyframes drone-rotor {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.drone-craft {
+  animation: drone-bob 3.6s ease-in-out infinite;
+}
+
+.drone-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: drone-shadow 3.6s ease-in-out infinite;
+}
+
+/* `transform-box: fill-box` is what makes `transform-origin: center` mean the
+   prop's own centre rather than the SVG viewport's, so each blade spins on
+   its hub. */
+.drone-rotor {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: drone-rotor 0.9s linear infinite;
+}
+
+/* Opposite pitch on the diagonal pair, as a real quadcopter flies. */
+.drone-rotor--reverse {
+  animation-direction: reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drone-craft,
+  .drone-shadow,
+  .drone-rotor {
+    animation: none;
+  }
+}

@@ -911,7 +911,12 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
         });
 
         // No notification and no email: the source announces only cancellation.
-        expect(await notificationsFor(designerId, awarded.id)).toEqual([]);
+        // The designer's one NEW_BID is the fixture's own bid, raised by
+        // `place`, not by `start` — which is exactly what "notifies nobody"
+        // has to mean now that a bid tells the designer something.
+        expect((await notificationsFor(designerId, awarded.id)).map((note) => note.type)).toEqual([
+          "NEW_BID",
+        ]);
         const pilotNotes = await notificationsFor(pilotId, awarded.id);
         expect(pilotNotes.map((note) => note.type)).toEqual(["BID_ACCEPTED"]);
 
@@ -1091,8 +1096,11 @@ describe.runIf(hasDb)("mission routes (live DB)", () => {
           details: `"Completable ${runId}"`,
         });
 
-        // Still nothing announced — the same silence as `start`.
-        expect(await notificationsFor(designerId, awarded.id)).toEqual([]);
+        // Still nothing announced — the same silence as `start`. The lone
+        // NEW_BID is the fixture's bid (see the `start` case above).
+        expect((await notificationsFor(designerId, awarded.id)).map((note) => note.type)).toEqual([
+          "NEW_BID",
+        ]);
       });
 
       it("409s on a mission that was awarded but never started", async () => {

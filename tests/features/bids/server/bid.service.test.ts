@@ -673,7 +673,7 @@ describe("bid.service.ts", () => {
       expect(daoMock.save).not.toHaveBeenCalled();
     });
 
-    it("emails the designer about the new bid and records no notification", async () => {
+    it("notifies and emails the designer about the new bid", async () => {
       const designer = fakeUser(7, false, {
         role: "DESIGNER",
         username: "dana",
@@ -694,8 +694,17 @@ describe("bid.service.ts", () => {
         amount: 250.5,
         message: "Can fly Tuesday",
       });
-      // The source creates no in-app notification on place — only the accept
-      // flow (Phase 5) notifies — so the only recorded side effect is audit.
+      // DELIBERATE ADDITION over the source, which emails the designer and
+      // raises no in-app notification on place. NEW_BID is the only
+      // notification type in the app aimed at a designer.
+      expect(createNotificationMock).toHaveBeenCalledTimes(1);
+      expect(createNotificationMock.mock.calls[0][0]).toEqual({
+        userId: 7,
+        type: "NEW_BID",
+        title: "New bid",
+        message: 'pat placed a bid on "Orchard survey".',
+        mission: { id: 1, name: "Orchard survey" },
+      });
       expect(recordMock).toHaveBeenCalledTimes(1);
     });
 
