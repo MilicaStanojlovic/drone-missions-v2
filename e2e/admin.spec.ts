@@ -33,18 +33,17 @@ import postgres from "postgres";
  * - `admin-users`, `admin-register`, `admin-missions`, `admin-audit-log`
  *   components and the `adminGuard` that fronts all four routes.
  *
- * **Why the admin account is minted here rather than taken from V12.** The plan
- * offers either the migration-seeded `admin@drone-missions.local` or an admin
- * created in test setup. This suite does the latter: V12 seeds only a BCrypt
- * *hash* (a dev credential, deliberately with no plaintext recorded anywhere in
- * either repo), so no spec can sign in as that account without inventing a
- * password for it. Registration refuses to mint an ADMIN — by design, per
+ * **Why the admin account is minted here.** V12 seeds no admin (it only widens
+ * `users_role_check` to accept the role); a first admin is created out of band.
+ * Registration refuses to mint an ADMIN — by design, per
  * `AuthService.register` — so the account is registered through the real public
  * endpoint and then promoted with one `update users set role = 'ADMIN'`, which
- * is exactly how V12 itself creates the first admin and is the same raw-SQL
- * seeding `e2e/notifications.spec.ts` already relies on. The V12 row is still
- * asserted to exist below, because everything here depends on that migration
- * having widened `users_role_check` to accept ADMIN at all.
+ * is the same raw-SQL seeding `e2e/notifications.spec.ts` already relies on.
+ * What the setup below guards is that V12 ran at all — i.e. that
+ * `users_role_check` accepts ADMIN — since everything here depends on it. V12
+ * no longer seeds an admin row (a committed password hash is a credential, and
+ * the migration is public), so the guard promotes a throwaway account and
+ * confirms the constraint allows it, rather than asserting a seeded row.
  *
  * Steps build on each other (suspend → reactivate → hide → unhide → remove →
  * read the trail), so the suite runs serially and shares its ids between tests;
@@ -188,14 +187,16 @@ test.describe("Phase 7 admin & moderation happy path (live DB)", () => {
     sql = postgres(DATABASE_URL, { max: 2 });
     api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL });
 
-    // V12 is what makes an ADMIN account expressible at all (it widens
-    // `users_role_check` and seeds the first one). Asserting its row is here
-    // guards the promotion below against silently running on a database whose
-    // migrations stopped short.
-    const seeded = await sql<{ role: string }[]>`
-      select role from users where email = 'admin@drone-missions.local'
+    // V12 is what makes an ADMIN account expressible at all — it widens
+    // `users_role_check` to accept ADMIN. Assert that directly (not via a
+    // seeded row, which V12 no longer creates) so the promotion below fails
+    // loudly here rather than silently on a database whose migrations stopped
+    // short of V12.
+    const [check] = await sql<{ def: string }[]>`
+      select pg_get_constraintdef(oid) as def
+      from pg_constraint where conname = 'users_role_check'
     `;
-    expect(seeded[0]?.role).toBe("ADMIN");
+    expect(check?.def).toContain("ADMIN");
 
     await registerViaApi(admin);
     await registerViaApi(designer);
