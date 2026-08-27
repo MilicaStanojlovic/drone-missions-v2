@@ -7,6 +7,40 @@ import { cn } from "@/lib/utils";
 import { apiFetch, extractBearerToken, storeToken } from "@/features/auth/auth.client";
 
 /**
+ * The shared password of the seeded demo accounts below. One constant feeds
+ * both the click handler and the caption, so the two cannot drift apart.
+ */
+const DEMO_PASSWORD = "Password123!";
+
+/**
+ * The seeded demo accounts offered under the form, one per role.
+ *
+ * Kept as data rather than two hand-written blocks because the rows differ
+ * only in label, email and accent — the same shape `ROLE_NAV` uses in
+ * `topbar.tsx` and `ROLE_CARDS` in `app/page.tsx`.
+ *
+ * The dots take the canvas-sourced `--role-*` tokens, the same accents the
+ * topbar's profile chip uses, so a role reads the same colour app-wide.
+ *
+ * No counterpart in the source: the Angular login screen offers nothing like
+ * this. It exists because the app is deployed publicly and registering gets
+ * you a bare account with no missions, bids or history behind it — a visitor
+ * would see an empty product.
+ */
+const DEMO_ACCOUNTS = [
+  {
+    label: "Mission Designer",
+    email: "teodora.savic@dronehub.rs",
+    dot: "bg-role-designer",
+  },
+  {
+    label: "Pilot",
+    email: "stefan.nikolic@dronepro.rs",
+    dot: "bg-role-pilot",
+  },
+] as const;
+
+/**
  * Login form (replaces `LoginComponent`). Submits email/password to
  * `POST /api/v1/auth/login`; on success the JWT comes back in the
  * response's `Authorization` header (the body is the user's profile, not
@@ -35,6 +69,26 @@ export function LoginForm() {
       ? "Enter a valid email address."
       : null;
   const passwordError = !password ? "Password is required." : null;
+
+  /**
+   * Fills the form with one demo account.
+   *
+   * Deliberately does NOT submit. The visitor should see the fields populate
+   * and press "Sign in" themselves: an automatic redirect on click is
+   * disorienting, and it hides what went wrong when the request fails.
+   *
+   * The `touched` flags are set for the same reason a real keystroke sets
+   * them — so the filled state is exactly what typing would have produced —
+   * and any error banner left over from an earlier attempt is cleared, so it
+   * cannot sit above freshly filled valid credentials.
+   */
+  function fillDemoAccount(demoEmail: string) {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
+    setEmailTouched(true);
+    setPasswordTouched(true);
+    setSubmitError(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,6 +222,67 @@ export function LoginForm() {
           Create one
         </Link>
       </p>
+
+      {/* Demo accounts. A `<section>` with a label rather than a bare div so
+          the block is reachable as a landmark, and each account is a real
+          `<button>` rather than a clickable div so it is keyboard-operable
+          and announced as a control. */}
+      <section aria-label="Demo accounts" className="border-border mt-6 border-t pt-5">
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="text-muted-foreground font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase">
+            Demo accounts
+          </h2>
+          <span className="text-muted-foreground/70 text-[10.5px]">tap to fill</span>
+        </div>
+
+        <div className="space-y-2">
+          {DEMO_ACCOUNTS.map((account) => (
+            <button
+              key={account.email}
+              type="button"
+              onClick={() => fillDemoAccount(account.email)}
+              /* The visible text says only "Pilot"; the accessible name has
+                 to say what activating it actually does. */
+              aria-label={`Fill in the ${account.label} demo account`}
+              className="border-input hover:bg-accent hover:border-ring flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors"
+            >
+              <span
+                aria-hidden="true"
+                className={cn("h-2 w-2 shrink-0 rounded-full", account.dot)}
+              />
+              {/* `min-w-0` so the email can truncate instead of widening the
+                  card on a narrow screen — a flex item will not shrink below
+                  its content otherwise. */}
+              <span className="min-w-0 flex-1">
+                <span className="text-foreground block text-[13px] font-semibold">
+                  {account.label}
+                </span>
+                <span
+                  title={account.email}
+                  className="text-muted-foreground block truncate font-mono text-[11px]"
+                >
+                  {account.email}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+          Both sign in with <span className="text-foreground font-mono">{DEMO_PASSWORD}</span>.
+        </p>
+
+        {/* Stated plainly and without alert styling: outgoing mail being off
+            is information, not a fault, and dressing it as a warning would
+            make a working demo look broken. Without it, a visitor who places
+            a bid waits for an email that never comes and concludes the
+            feature is broken — the notification really is raised, it just is
+            not delivered. */}
+        <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+          Email delivery is switched off in this demo — you&apos;ll still see every
+          notification in the app, but nothing is sent to a real inbox.
+        </p>
+      </section>
     </>
   );
 }
