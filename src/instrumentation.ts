@@ -24,7 +24,7 @@
  *
  * `register()` is called in more situations than "the server just started
  * serving traffic", and a cron timer is wrong in every one of the others.
- * Three guards rule those out, and the *shape* of the first one is load-bearing
+ * Four guards rule those out, and the *shape* of the first one is load-bearing
  * rather than stylistic:
  *
  * 1. **`NEXT_RUNTIME === "nodejs"`, written inline around the import.** Next
@@ -50,17 +50,28 @@
  *    The suites drive the scheduler explicitly (`scheduler.test.ts`) or call
  *    `runOverdueSweep()` directly (`overdue-sweep.test.ts`); neither wants it
  *    started behind its back.
+ * 4. **No `VERCEL`.** On a serverless host there is no long-lived process to
+ *    hold a timer: a lambda is frozen seconds after it responds and reclaimed
+ *    within minutes, so a 09:00 timer registered here would essentially never
+ *    fire — and `scheduler.ts`'s `unref: true` guarantees it could not hold
+ *    the process open even if it wanted to. Registering it anyway would only
+ *    drag the `scheduler → overdue-sweep → email.service → mission.cache`
+ *    module graph into every cold start and log a start line for a job that
+ *    never runs. There, `vercel.json`'s `crons` entry drives
+ *    `GET /api/cron/overdue-sweep` instead — see that route for the full
+ *    reasoning. The two mechanisms are mutually exclusive by environment.
  *
- * All four are read from `process.env` rather than `@/lib/env`: they are
- * Next's and the runner's own variables, not the app's configuration schema,
- * and they are absent by design in most processes.
+ * All five are read from `process.env` rather than `@/lib/env`: they are
+ * Next's, the runner's and the host's own variables, not the app's
+ * configuration schema, and they are absent by design in most processes.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     if (
       process.env.NEXT_PHASE === "phase-production-build" ||
       process.env.NODE_ENV === "test" ||
-      process.env.VITEST
+      process.env.VITEST ||
+      process.env.VERCEL
     ) {
       return;
     }
