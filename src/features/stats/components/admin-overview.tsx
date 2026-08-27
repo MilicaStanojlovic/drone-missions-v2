@@ -144,14 +144,21 @@ function StatsBody({ stats }: { stats: PlatformStats }) {
         <Tile value={avgBidText} label="Avg bid" color="text-[#0e9bb5]" />
       </div>
 
+      {/* `min-w-0` on both panels: a grid item defaults to `min-width: auto`,
+          so without it neither card can shrink below its own min-content width
+          and the pair overflows the viewport on a phone (the bid chart's six
+          labels set that floor). */}
       <div className="grid gap-4 min-[900px]:grid-cols-2">
-        <div className={cn(CARD, "p-5")}>
+        <div className={cn(CARD, "min-w-0 p-5")}>
           <div className={PANEL_TITLE}>MISSIONS BY STATUS</div>
           <div className="flex flex-col gap-[11px]">
             {MISSION_STATUSES.map((status) => {
               const count = stats.missionsByStatus[status];
               return (
-                <div key={status} className="grid grid-cols-[92px_1fr_28px] items-center gap-3">
+                <div
+                  key={status}
+                  className="grid grid-cols-[72px_minmax(0,1fr)_28px] items-center gap-2 min-[420px]:grid-cols-[92px_minmax(0,1fr)_28px] min-[420px]:gap-3"
+                >
                   <span className="font-mono text-[10.5px] tracking-[0.05em] text-[#5c6b7a] uppercase">
                     {MISSION_STATUS_LABELS[status]}
                   </span>
@@ -175,14 +182,14 @@ function StatsBody({ stats }: { stats: PlatformStats }) {
           </div>
         </div>
 
-        <div className={cn(CARD, "flex flex-col p-5")}>
+        <div className={cn(CARD, "flex min-w-0 flex-col p-5")}>
           <div className={PANEL_TITLE}>BIDS PER MISSION</div>
           {stats.topMissionsByBids.length > 0 ? (
             <div className="flex min-h-[150px] flex-1 items-end gap-3">
               {stats.topMissionsByBids.map((top) => (
                 <div
                   key={top.name}
-                  className="flex h-full flex-1 flex-col items-center justify-end gap-[7px]"
+                  className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-[7px]"
                 >
                   <span className="text-primary font-mono text-xs font-semibold">{top.bids}</span>
                   <div className="flex w-full flex-1 items-end">
