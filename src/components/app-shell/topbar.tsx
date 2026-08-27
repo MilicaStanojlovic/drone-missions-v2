@@ -199,7 +199,17 @@ export function Topbar({ username, role }: TopbarProps) {
   );
 
   return (
-    <header className="border-border bg-card sticky top-0 z-50 border-b">
+    /* z-1100, not a Tailwind step, and load-bearing: Leaflet paints its own
+       scale — panes at 200-700, controls at 800-1000 — so anything below that
+       loses to every mission map on the page. The header carries a z-index and
+       therefore forms a stacking context, which means this one value also
+       decides where the notification dropdown and the mobile drawer land; their
+       own z-values only order things *within* here. 1100 clears Leaflet while
+       staying under the confirm/waypoint dialogs (2000) and the toast (2100),
+       which must still cover the bar. Straight from the source's `.nav` rule
+       (app.component.css), comment and all — dropping it to z-50 is what put
+       maps over the navbar and the bell dropdown under them. */
+    <header className="border-border bg-card sticky top-0 z-[1100] border-b">
       <div className="mx-auto flex h-[60px] max-w-[1240px] items-center justify-between gap-4 px-6">
         <div className="flex min-w-0 items-center gap-4 md:gap-[30px]">
           <Link
@@ -278,7 +288,8 @@ export function Topbar({ username, role }: TopbarProps) {
           {/* z-30 / z-40 here sit deliberately BELOW the notification bell's
               own backdrop (z-40) and panel (z-50), so the bell still opens
               over a drawer that is already down. Both are local to the
-              header's stacking context, which its own z-50 creates. */}
+              header's stacking context, which its own z-1100 creates — so
+              these low numbers never compete with the maps outside it. */}
           <div
             role="presentation"
             onClick={() => setMenuOpen(false)}
