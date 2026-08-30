@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Drone Missions — a marketplace for drone flight missions</title>
+  <meta name="description" content="Drone Missions connects mission designers with drone pilots: plan a flight on the map, collect bids, award the job, fly it, rate the result. Live demo on Vercel." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='25' y='25' width='50' height='50' rx='8' fill='%232f6bff' transform='rotate(45 50 50)'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* Tokens lifted from the app itself (src/app/globals.css) so this page
+       reads as the same product. */
+    :root {
+      --bg: #eef1f5;
+      --fg: #1b2732;
+      --card: #ffffff;
+      --muted-fg: #6b7c8d;
+      --border: #e5eaf0;
+      --primary: #2f6bff;
+      --radius: 0.625rem;
+      --role-designer: #2f6bff;
+      --role-pilot: #12a06a;
+      --role-admin: #6d5ef0;
+      --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, #e6ecf7 0%, var(--bg) 340px),
+        var(--bg);
+      color: var(--fg);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    /* wordmark */
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-weight: 600; letter-spacing: 0.22em;
+      font-size: 15px; color: var(--fg);
+    }
+    .brand .diamond {
+      width: 13px; height: 13px; border-radius: 2px;
+      background: var(--primary); transform: rotate(45deg); flex: none;
+    }
+
+    header.top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 22px 0;
+    }
+    header.top nav { display: flex; gap: 22px; font-size: 14.5px; }
+    header.top nav a { color: var(--muted-fg); }
+    header.top nav a:hover { color: var(--fg); text-decoration: none; }
+
+    /* hero */
+    .hero { text-align: center; padding: 52px 0 30px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.24em;
+      color: var(--primary); text-transform: uppercase; font-weight: 500;
+    }
+    .hero h1 {
+      font-size: clamp(34px, 6vw, 56px); line-height: 1.08;
+      margin: 14px auto 18px; max-width: 780px; font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hero p.pitch {
+      max-width: 640px; margin: 0 auto 30px; color: var(--muted-fg);
+      font-size: 18px;
+    }
+    .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-block; border-radius: var(--radius); padding: 13px 26px;
+      font-weight: 600; font-size: 15.5px; transition: transform .15s, box-shadow .15s;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--primary); color: #fff;
+      box-shadow: 0 8px 22px rgba(47, 107, 255, 0.28);
+    }
+    .btn-primary:hover { box-shadow: 0 12px 30px rgba(47, 107, 255, 0.36); }
+    .btn-ghost {
+      background: var(--card); color: var(--fg); border: 1px solid var(--border);
+    }
+    .demo-note {
+      margin-top: 18px; font-size: 14px; color: var(--muted-fg);
+      font-family: var(--mono);
+    }
+    .demo-note .dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--role-pilot); margin-right: 7px; vertical-align: 1px;
+    }
+
+    /* framed hero screenshot */
+    .hero-shot { margin: 46px auto 0; max-width: 980px; }
+    .frame {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 24px 70px rgba(27, 39, 50, 0.16);
+    }
+    .frame .bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      background: #f8fafc;
+    }
+    .frame .bar span { width: 10px; height: 10px; border-radius: 50%; background: #dbe2ea; }
+    .frame .bar .url {
+      flex: 1; text-align: center; font-family: var(--mono); font-size: 12px;
+      color: var(--muted-fg); width: auto; height: auto; background: none;
+    }
+    .frame img { display: block; width: 100%; height: auto; }
+
+    /* sections */
+    section { padding: 64px 0 8px; }
+    .sec-head { text-align: center; max-width: 620px; margin: 0 auto 38px; }
+    .sec-head h2 { font-size: 30px; margin: 12px 0 10px; letter-spacing: -0.01em; }
+    .sec-head p { color: var(--muted-fg); margin: 0; }
+
+    .grid { display: grid; gap: 18px; }
+    .roles { grid-template-columns: repeat(3, 1fr); }
+    .features { grid-template-columns: repeat(3, 1fr); }
+    .shots { grid-template-columns: repeat(2, 1fr); gap: 26px; }
+    @media (max-width: 860px) {
+      .roles, .features, .shots { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 26px;
+    }
+    .role-card { border-top: 3px solid var(--accent-color); }
+    .role-card .eyebrow { color: var(--accent-color); }
+    .role-card h3 { margin: 10px 0 8px; font-size: 20px; }
+    .role-card p { margin: 0; color: var(--muted-fg); font-size: 15px; }
+    .role-card .glyph {
+      width: 12px; height: 12px; border: 2px solid var(--accent-color);
+      display: inline-block; margin-bottom: 14px;
+    }
+    .glyph.diamond { transform: rotate(45deg); }
+    .glyph.circle { border-radius: 50%; width: 13px; height: 13px; }
+    .glyph.square { border-radius: 3px; }
+
+    .feature h3 { margin: 0 0 6px; font-size: 16.5px; }
+    .feature p { margin: 0; color: var(--muted-fg); font-size: 14.5px; }
+    .feature .tag {
+      font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em;
+      color: var(--primary); text-transform: uppercase;
+      display: block; margin-bottom: 10px;
+    }
+
+    /* lifecycle strip */
+    .lifecycle {
+      display: flex; flex-wrap: wrap; gap: 8px 6px; justify-content: center;
+      align-items: center; font-family: var(--mono); font-size: 12.5px;
+      letter-spacing: 0.08em; color: var(--muted-fg); margin-top: 30px;
+    }
+    .lifecycle .st {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 5px 14px; white-space: nowrap;
+    }
+    .lifecycle .arrow { color: #b6c2cf; }
+
+    /* screenshots */
+    .shot figure { margin: 0; }
+    .shot .frame { box-shadow: 0 14px 40px rgba(27, 39, 50, 0.10); }
+    .shot figcaption {
+      margin-top: 12px; font-size: 14px; color: var(--muted-fg);
+      text-align: center;
+    }
+    .shot figcaption b { color: var(--fg); font-weight: 600; }
+
+    /* tech stack */
+    .stack {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+    }
+    .stack span {
+      font-family: var(--mono); font-size: 13px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 7px 16px;
+    }
+    .stack-note {
+      text-align: center; color: var(--muted-fg); font-size: 14.5px;
+      max-width: 560px; margin: 22px auto 0;
+    }
+
+    footer {
+      margin-top: 80px; border-top: 1px solid var(--border);
+      padding: 34px 0 46px; text-align: center;
+      color: var(--muted-fg); font-size: 14px;
+    }
+    footer .links { margin: 12px 0 0; display: flex; gap: 22px; justify-content: center; }
+  </style>
+</head>
+<body>
+
+  <div class="wrap">
+    <header class="top">
+      <span class="brand"><span class="diamond"></span>DRONE&nbsp;MISSIONS</span>
+      <nav>
+        <a href="#roles">Roles</a>
+        <a href="#features">Features</a>
+        <a href="#screenshots">Screenshots</a>
+        <a href="#stack">Tech</a>
+        <a href="https://github.com/MilicaStanojlovic/drone-missions-v2">GitHub</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <span class="eyebrow">Drone flight marketplace</span>
+      <h1>Plan the mission on a map.<br />Let pilots bid to fly it.</h1>
+      <p class="pitch">
+        Drone Missions connects mission designers with drone pilots: plot the
+        waypoints and geofence, publish the job, collect bids, award one pilot —
+        then track the flight from start to rating.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://drone-missions-v2.vercel.app">Open the live app →</a>
+        <a class="btn btn-ghost" href="https://github.com/MilicaStanojlovic/drone-missions-v2">View source on GitHub</a>
+      </div>
+      <p class="demo-note"><span class="dot"></span>Demo accounts are ready on the login screen — no registration needed.</p>
+
+      <div class="hero-shot">
+        <div class="frame">
+          <div class="bar">
+            <span></span><span></span><span></span>
+            <span class="url">drone-missions-v2.vercel.app</span>
+          </div>
+          <img src="assets/mission.png" alt="A mission detail page: Leaflet map with numbered waypoints inside a dashed geofence, mission status stepper, and a bids panel with two pilot bids ready to accept." width="2549" height="2238" />
+        </div>
+      </div>
+    </section>
+
+    <section id="roles">
+      <div class="sec-head">
+        <span class="eyebrow">Three roles</span>
+        <h2>One marketplace, three seats at the table</h2>
+      </div>
+      <div class="grid roles">
+        <div class="card role-card" style="--accent-color: var(--role-designer)">
+          <span class="glyph diamond"></span>
+          <span class="eyebrow">Role 01</span>
+          <h3>Mission Designer</h3>
+          <p>Plot waypoints on the map, publish the job, review incoming bids and award it to one pilot.</p>
+        </div>
+        <div class="card role-card" style="--accent-color: var(--role-pilot)">
+          <span class="glyph circle"></span>
+          <span class="eyebrow">Role 02</span>
+          <h3>Pilot</h3>
+          <p>Browse published missions, study the flight plan, place a bid, and fly the jobs you win.</p>
+        </div>
+        <div class="card role-card" style="--accent-color: var(--role-admin)">
+          <span class="glyph square"></span>
+          <span class="eyebrow">Role 03</span>
+          <h3>Platform Admin</h3>
+          <p>Watch platform stats, moderate missions, manage users, and read the append-only audit log.</p>
+        </div>
+      </div>
+      <div class="lifecycle" aria-label="Mission lifecycle">
+        <span class="st">DRAFT</span><span class="arrow">→</span>
+        <span class="st">PUBLISHED</span><span class="arrow">→</span>
+        <span class="st">BIDDING</span><span class="arrow">→</span>
+        <span class="st">AWARDED</span><span class="arrow">→</span>
+        <span class="st">IN&nbsp;PROGRESS</span><span class="arrow">→</span>
+        <span class="st">COMPLETED</span>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="sec-head">
+        <span class="eyebrow">What's inside</span>
+        <h2>Everything a mission needs, end to end</h2>
+      </div>
+      <div class="grid features">
+        <div class="card feature">
+          <span class="tag">Map planning</span>
+          <h3>Waypoints &amp; geofence</h3>
+          <p>Draw the route node by node on a Leaflet map and fence the flight zone with a circle or polygon — path length and estimated flight time update live.</p>
+        </div>
+        <div class="card feature">
+          <span class="tag">Bidding</span>
+          <h3>Competitive bids</h3>
+          <p>Pilots bid in USD with an optional message; the designer compares offers side by side and awards exactly one — the rest are rejected automatically.</p>
+        </div>
+        <div class="card feature">
+          <span class="tag">Lifecycle</span>
+          <h3>Status all the way</h3>
+          <p>Every mission walks the same six-step ladder from draft to completed, with cancellation handled cleanly at any point along the way.</p>
+        </div>
+        <div class="card feature">
+          <span class="tag">Notifications</span>
+          <h3>In-app + email</h3>
+          <p>New bids, awards, rejections, cancellations and overdue flights all land in the bell menu — and go out as emails when mail is enabled.</p>
+        </div>
+        <div class="card feature">
+          <span class="tag">Ratings</span>
+          <h3>Both sides rate</h3>
+          <p>After completion the designer and the pilot rate each other, 1–5 with a comment, and the score follows the profile around the marketplace.</p>
+        </div>
+        <div class="card feature">
+          <span class="tag">Admin</span>
+          <h3>Moderation &amp; audit</h3>
+          <p>Admins see platform-wide stats, hide or remove missions, suspend users — and every action lands in an append-only audit log.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="screenshots">
+      <div class="sec-head">
+        <span class="eyebrow">Screenshots</span>
+        <h2>A quick tour</h2>
+        <p>Straight from the live deployment.</p>
+      </div>
+      <div class="grid shots">
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/login.png" alt="Sign-in screen with one-click demo accounts for the Mission Designer and Pilot roles." width="2597" height="1936" /></div>
+            <figcaption><b>Sign in.</b> Demo accounts fill themselves in with one tap.</figcaption>
+          </figure>
+        </div>
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/new-mission.png" alt="New mission editor: interactive map for adding waypoint nodes and a zone, next to the mission brief form." width="2452" height="1529" /></div>
+            <figcaption><b>Plan.</b> Click the map to add nodes, fence the zone, write the brief.</figcaption>
+          </figure>
+        </div>
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/my-missions.png" alt="My Missions dashboard with per-status counts and mission cards showing map previews." width="2596" height="2248" /></div>
+            <figcaption><b>Publish.</b> The designer's dashboard tracks every mission by status.</figcaption>
+          </figure>
+        </div>
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/mission-bid.png" alt="Pilot's view of a mission in bidding: flight plan on the map and a panel to place, update or withdraw a bid." width="2596" height="2248" /></div>
+            <figcaption><b>Bid.</b> Pilots study the flight plan and compete for the job.</figcaption>
+          </figure>
+        </div>
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/notifications.png" alt="Notification bell menu listing new-bid notifications." width="488" height="661" /></div>
+            <figcaption><b>Stay in the loop.</b> Bids, awards and deadlines land in the bell.</figcaption>
+          </figure>
+        </div>
+        <div class="shot">
+          <figure>
+            <div class="frame"><img loading="lazy" src="assets/admin-overview.png" alt="Admin platform overview with mission, pilot and bid stats, missions-by-status bars and bids-per-mission chart." width="2452" height="1529" /></div>
+            <figcaption><b>Administer.</b> Stats, moderation, users and the audit trail.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <div class="sec-head">
+        <span class="eyebrow">Under the hood</span>
+        <h2>Tech stack</h2>
+      </div>
+      <div class="stack">
+        <span>Next.js 15</span>
+        <span>React 19</span>
+        <span>TypeScript</span>
+        <span>Tailwind CSS 4</span>
+        <span>Drizzle ORM</span>
+        <span>Supabase Postgres</span>
+        <span>Flyway</span>
+        <span>Leaflet</span>
+        <span>Vitest + Playwright</span>
+        <span>Vercel</span>
+      </div>
+      <p class="stack-note">
+        A full re-platforming of an earlier Spring Boot + Angular application into a single
+        unified Next.js codebase — same schema, same behavior, one deployable app.
+      </p>
+    </section>
+
+    <footer>
+      <span class="brand"><span class="diamond"></span>DRONE&nbsp;MISSIONS</span>
+      <div class="links">
+        <a href="https://drone-missions-v2.vercel.app">Live app</a>
+        <a href="https://github.com/MilicaStanojlovic/drone-missions-v2">Source code</a>
+      </div>
+      <p>Built by Milica Stanojlovic</p>
+    </footer>
+  </div>
+
+</body>
+</html>
