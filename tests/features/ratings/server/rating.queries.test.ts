@@ -26,8 +26,8 @@ import * as queries from "@/features/ratings/server/rating.queries";
  *    written against — until now exercised only against a stubbed module in
  *    `mission.mapper.test.ts`.
  *
- * Run against the local Postgres that `docker compose up db` starts and Flyway
- * migrates (`MIGRATION_PLAN.md` §8), following the shape of
+ * Run against the Flyway-migrated Postgres configured in `DATABASE_URL`
+ * (`MIGRATION_PLAN.md` §8), following the shape of
  * `tests/features/bids/server/bid.queries.test.ts`. Skipped, with a visible reason,
  * when `DATABASE_URL` isn't configured — `vitest.config.ts` forwards the
  * variable from `.env.local`/`.env`.

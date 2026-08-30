@@ -3,8 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Playwright happy-path e2e for Phase 2 — Missions core.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8), through the whole
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8), through the whole
  * mission lifecycle this phase ships: a designer plans a mission on the
  * Leaflet map (waypoints + flight zone) and publishes it, finds it in the
  * open feed under the location / keyword / date filters, opens its detail,

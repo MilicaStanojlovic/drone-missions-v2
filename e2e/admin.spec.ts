@@ -4,8 +4,8 @@ import postgres from "postgres";
 /**
  * Playwright happy-path e2e for Phase 7 — Admin & Moderation + Audit read.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) through the whole
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) through the whole
  * moderation story this phase ships: an admin signs in, works the users table
  * (suspend a pilot, reactivate them, mint another admin), works the all-missions
  * table (hide a mission, watch it leave the pilot feed, unhide it, remove it for

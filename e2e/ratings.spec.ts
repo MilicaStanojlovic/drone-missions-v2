@@ -3,8 +3,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 /**
  * Playwright happy-path e2e for Phase 6 — Ratings.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) through the whole rating
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) through the whole rating
  * story this phase ships: a mission is taken all the way to COMPLETED, the two
  * people who actually did the work rate each other exactly once, each sees both
  * halves of the exchange, a second attempt is refused, and the two reputations

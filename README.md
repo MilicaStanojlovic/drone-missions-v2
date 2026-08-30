@@ -39,7 +39,7 @@ hand-mirroring the migrations exactly). See `MIGRATION_PLAN.md` §2–3 and §8.
 ### Prerequisites
 
 - The [Flyway CLI](https://documentation.red-gate.com/fd/command-line-241409161.html) installed
-  and on `PATH` (or run it via the `flyway` service in `docker-compose.yml` once that lands).
+  and on `PATH` (or apply migrations with `node scripts/apply-migrations.mjs`, which needs no Flyway CLI).
 - A reachable Postgres instance (Supabase dev project, or a local Postgres) and its JDBC
   connection string in `FLYWAY_URL`.
 
@@ -66,8 +66,7 @@ expected to start clean from `V1`, never adopted mid-history.
 ### Status
 
 No database is configured for this environment yet, so an actual `migrate` run is **skipped — no
-DB configured**. The command above works as soon as `.env.local`'s `FLYWAY_URL` is filled in (or
-the compose Postgres service is up, once `docker-compose.yml` lands later in Phase 0).
+DB configured**. The command above works as soon as `.env.local`'s `FLYWAY_URL` is filled in.
 
 ## Drizzle schema mirror
 
@@ -92,51 +91,3 @@ Drizzle never owns the schema and never runs `migrate`/`push`; it only queries a
 
 Both commands read `DATABASE_URL` from [`drizzle.config.ts`](./drizzle.config.ts). Status here:
 **skipped — no DB configured** (same as the Flyway `migrate` above).
-
-## Docker
-
-Replaces the Spring backend's executable jar: [`Dockerfile`](./Dockerfile) is a multi-stage build
-that produces a minimal image running the Next.js **standalone** server (`output: "standalone"`
-in `next.config.ts`) as a long-running Node process — no source, no `node_modules` beyond what's
-actually traced, no package manager in the final layer.
-
-[`docker-compose.yml`](./docker-compose.yml) wires up the full local stack:
-
-| Service  | Role                                                                                                                                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`    | The image above. Reads its config from the same env vars as `pnpm dev` (see `.env.example`); `DATABASE_URL`/`FLYWAY_URL` default to the `db` service below so the stack works with zero configuration.                                 |
-| `db`     | `postgres:16-alpine` — the documented drop-in **local fallback** for a Supabase dev project. Same Flyway-managed schema, just self-hosted. Its credentials are the source of the sample `DATABASE_URL`/`FLYWAY_URL` in `.env.example`. |
-| `flyway` | Official Flyway image, one-shot. Mounts `db/migration/` (read-only) and `flyway.conf`; not part of the default `up` graph.                                                                                                             |
-
-```bash
-# Build + run the app (with Postgres as a dependency):
-docker compose --env-file .env.local up app
-
-# Apply V1..V18 to the compose Postgres:
-docker compose --env-file .env.local run --rm flyway migrate
-
-# Build the image directly, without compose:
-docker build -t drone-missionsv2 .
-```
-
-Compose does **not** read `.env.local` automatically (it only auto-loads a file literally named
-`.env`) — pass `--env-file .env.local` explicitly, or export the vars into your shell first. Every
-var falls back to a localhost/`db`-service default if left unset, so `docker compose up` works
-out of the box for local dev even with no env file at all; real Supabase/production values still
-belong only in `.env.local`, never committed.
-
-`JWT_SECRET` also has to be present at _build_ time (see the `Dockerfile`'s comment on why:
-`next build` evaluates every route module, which imports the fail-fast env loader) — the build
-stage uses a harmless placeholder for that, and it is never used at runtime: the standalone server
-reads live `process.env` again the moment the container actually boots, so whatever `JWT_SECRET`
-the `app` service (or your shell) supplies at `run`/`up` time is the one that's actually used to
-sign tokens.
-
-### Status
-
-Verified in this environment: `docker build .` succeeds, `docker compose config` validates, and a
-container built from the image serves `GET /api/health` → `200 {"status":"ok","db":"not_configured"}`
-with a runtime-supplied `JWT_SECRET`. **Not** verified here — no DB configured in this environment:
-booting the full compose stack against `db`, running `flyway migrate` for real, and the
-`db: "up"` health-check path. Those become checkable the moment a database exists (Supabase or the
-compose `db` service).

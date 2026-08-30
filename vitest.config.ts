@@ -7,8 +7,8 @@ import path from "node:path";
  * Reads `.env.local`/`.env` (Vite's own loader, the same files
  * `next dev`/`next build` read) so live-DB suites — `tests/lib/audit.test.ts`
  * and the ones later phases add — can pick up a real `DATABASE_URL` when a
- * developer has one configured (e.g. `docker compose up db` +
- * `.env.local` per `MIGRATION_PLAN.md` §8) and fall back to their
+ * developer has one configured (a real `DATABASE_URL` in `.env.local` per
+ * `MIGRATION_PLAN.md` §8) and fall back to their
  * "skipped — no DB configured" branch otherwise, exactly like
  * `GET /api/health` already does. Third arg `""` (no required prefix) is
  * needed because these vars aren't `VITE_`-prefixed — Vite's own default

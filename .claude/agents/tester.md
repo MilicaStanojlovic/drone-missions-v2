@@ -24,7 +24,7 @@ read-only reference). You run checks; you **never edit files**.
    reachable or the config isn't wired yet.
 6. E2E (best effort): if a Playwright spec exists for this phase, run it
    (`pnpm exec playwright test <spec>`). If it needs a running app, try
-   `pnpm build && pnpm start` (or the docker-compose service) first; if the app can't start
+   `pnpm build && pnpm start` first; if the app can't start
    because required env (e.g. `DATABASE_URL` for the Supabase dev project) is missing, report
    `E2E: skipped — <reason>` rather than failing the phase on environment alone.
 7. **Test-parity audit:** list the JUnit test classes in the backend's `src/test/java` covering

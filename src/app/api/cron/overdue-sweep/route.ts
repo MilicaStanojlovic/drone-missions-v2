@@ -9,12 +9,11 @@ import { withErrorHandling } from "@/lib/api/handler";
  * sweep, for deployments that have no long-lived process to hold a timer.
  *
  * ## Why this exists
- * In the containerised deployment this app was built for (`Dockerfile`,
- * `output: "standalone"`, `CMD ["node", "server.js"]`) the sweep is owned by
+ * On a long-lived Node server (`pnpm start`) the sweep is owned by
  * `src/lib/scheduler.ts`: `src/instrumentation.ts` runs once per server boot
  * and registers a node-cron timer for 09:00 Europe/Belgrade. That is the port
- * of Spring's `@Scheduled` `OverdueNotificationScheduler`, and on a container
- * it works exactly as the source does.
+ * of Spring's `@Scheduled` `OverdueNotificationScheduler`, and on such a
+ * server it works exactly as the source does.
  *
  * On Vercel it cannot. There is no long-lived process: a lambda is frozen
  * seconds after it responds and reclaimed within minutes, so the odds that

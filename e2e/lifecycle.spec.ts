@@ -3,8 +3,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 /**
  * Playwright happy-path e2e for Phase 5 — Acceptance + Mission lifecycle.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) through the whole award
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) through the whole award
  * and lifecycle story this phase ships: a designer awards one of two competing
  * bids, the winner and the loser are each told what happened, the winner finds
  * the job on `/my-jobs`, starts it and marks it finished — and, in the second

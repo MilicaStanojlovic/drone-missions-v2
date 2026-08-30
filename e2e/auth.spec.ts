@@ -4,8 +4,8 @@ import { expect, test, type Page } from "@playwright/test";
  * Playwright happy-path e2e for Phase 1 — Auth & current user.
  *
  * Live-DB only: drives the real running app (register/login pages, the real
- * `/api/v1/**` routes) against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) — skipped, with a
+ * `/api/v1/**` routes) against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) — skipped, with a
  * visible reason, whenever `DATABASE_URL` isn't configured, mirroring the
  * `hasDb` convention in `tests/lib/audit.test.ts` /
  * `tests/app/api/v1/auth/routes.test.ts` and `GET /api/health`'s own

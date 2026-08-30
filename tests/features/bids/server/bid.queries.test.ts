@@ -24,8 +24,8 @@ import * as queries from "@/features/bids/server/bid.queries";
  *  - `ORDER BY created_at DESC`, which `bid.service.test.ts` can only assume.
  *
  * `bid.service.test.ts` stubs this module out entirely, so none of the above
- * is proven there. It is checked here instead, against the local Postgres that
- * `docker compose up db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8),
+ * is proven there. It is checked here instead, against the Flyway-migrated
+ * Postgres configured in `DATABASE_URL` (`MIGRATION_PLAN.md` §8),
  * following the shape of `tests/features/missions/server/mission.queries.test.ts`.
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
@@ -149,7 +149,7 @@ describe.runIf(hasDb)("bid.queries.ts (live DB)", () => {
    * The platform's bid totals as they stood *before* this file inserted
    * anything — captured by a hook registered ahead of the fixture hook below,
    * which is what makes it a reading of a database this suite has not touched
-   * yet. On the clean local/CI database (`docker compose up db` + Flyway, no
+   * yet. On the clean local/CI database (freshly Flyway-migrated, no
    * migration seeds a bid) that reading is the `volume()` empty case; see the
    * case that consumes it.
    */

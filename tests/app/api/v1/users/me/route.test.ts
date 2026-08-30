@@ -13,9 +13,8 @@ import { GET as meRoute } from "@/app/api/v1/users/me/route";
  * Route-level integration suite for `GET /api/v1/users/me`.
  *
  * Live-DB only, mirroring `tests/app/api/v1/auth/routes.test.ts`: exercises
- * the real route handler against the local Postgres started by
- * `docker compose up db` — skipped, with a visible reason, when
- * `DATABASE_URL` isn't configured.
+ * the real route handler against the Postgres configured in `DATABASE_URL`
+ * — skipped, with a visible reason, when `DATABASE_URL` isn't configured.
  *
  * `/api/v1/users/me` is authenticated-only (not in `middleware.ts`'s
  * `PUBLIC_PATHS`), so the anonymous case is exercised by calling

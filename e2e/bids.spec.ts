@@ -3,8 +3,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 /**
  * Playwright happy-path e2e for Phase 3 — Bids.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) through the whole bid
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) through the whole bid
  * lifecycle this phase ships: a pilot places the first bid on a published
  * mission (which flips it to BIDDING), updates it, finds it on `/my-bids`,
  * walks the `from=my-bids` back link to the detail, is seen by the designer

@@ -4,8 +4,8 @@ import postgres from "postgres";
 /**
  * Playwright happy-path e2e for Phase 9 — Platform stats dashboard.
  *
- * Drives the real running app against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8) through the one story
+ * Drives the real running app against the Postgres configured
+ * in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8) through the one story
  * this phase ships: an admin signs in, opens `/admin/overview`, and the page
  * that has rendered "Couldn't load the platform stats" ever since Phase 7 put
  * it there now paints a real census — six tiles, seven status bars, the

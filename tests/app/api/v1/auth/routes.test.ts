@@ -11,8 +11,8 @@ import { POST as logoutRoute } from "@/app/api/v1/auth/logout/route";
 /**
  * Route-level integration suite for `POST /api/v1/auth/{register,login,logout}`.
  *
- * Live-DB only: exercises the real route handlers against the local Postgres
- * started by `docker compose up db` (see `MIGRATION_PLAN.md` §8), the same
+ * Live-DB only: exercises the real route handlers against the Postgres
+ * configured in `DATABASE_URL` (see `MIGRATION_PLAN.md` §8), the same
  * way `tests/lib/audit.test.ts` does — skipped, with a visible reason, when
  * `DATABASE_URL` isn't configured. `vitest.config.ts` forwards it from
  * `.env.local`/`.env` when present.

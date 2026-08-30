@@ -15,8 +15,8 @@ import type { MissionStatus, MissionWrite } from "@/features/missions/mission.ty
  * and the designer join is a LEFT one specifically so legacy ownerless rows
  * survive it. None of that can be proven by a mocked test — `mission.cache.
  * test.ts` stubs this module out entirely, and `mission.service.test.ts` stubs
- * the DAO — so it is checked here, against the local Postgres that
- * `docker compose up db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8).
+ * the DAO — so it is checked here, against the Flyway-migrated Postgres
+ * configured in `DATABASE_URL` (`MIGRATION_PLAN.md` §8).
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
  * the same shape as `tests/lib/audit.test.ts` and the auth route suite;

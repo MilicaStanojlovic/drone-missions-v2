@@ -29,8 +29,8 @@ import type { AuditSearchFilters } from "@/features/audit/audit.types";
  * the same join.
  *
  * `audit.service.test.ts` mocks this module out entirely, so none of the above
- * is visible from there. Checked here against the local Postgres that
- * `docker compose up db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8),
+ * is visible from there. Checked here against the Flyway-migrated Postgres
+ * configured in `DATABASE_URL` (`MIGRATION_PLAN.md` §8),
  * the same shape `mission.queries.test.ts` uses.
  *
  * Every case is scoped to this run's own rows — by `actorId`, or by a `q`

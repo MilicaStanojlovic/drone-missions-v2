@@ -9,8 +9,8 @@ import { withErrorHandling } from "@/lib/api/handler";
  * `GET /api/health` — boot-level health probe.
  *
  * No Spring equivalent: the backend never wired up Actuator, so this route
- * is new rather than ported. It exists purely so an orchestrator (Docker
- * healthcheck, uptime monitor, load balancer) can confirm the Node process
+ * is new rather than ported. It exists purely so the hosting platform (an
+ * uptime monitor, load balancer, health probe) can confirm the Node process
  * is alive and, separately, whether it currently has a usable database
  * connection — without that second fact ever turning "the app is up" into
  * a 5xx.

@@ -22,8 +22,8 @@ import {
 /**
  * Vitest suite for `audit.ts`.
  *
- * Live-DB only: writes a real row against the local Postgres started by
- * `docker compose up db` (see `MIGRATION_PLAN.md` §8), the way the plan
+ * Live-DB only: writes a real row against the Postgres configured in
+ * `DATABASE_URL` (see `MIGRATION_PLAN.md` §8), the way the plan
  * task calls for. Skipped — with a visible reason, mirroring
  * `GET /api/health`'s `not_configured` branch — whenever `DATABASE_URL`
  * isn't wired up (e.g. CI before a `DATABASE_URL` secret exists; see

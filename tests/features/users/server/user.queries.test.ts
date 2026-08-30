@@ -15,8 +15,8 @@ import { UserNotFoundError } from "@/features/users/server/user.queries";
  * `count`), and `setSuspended` is the targeted `UPDATE` that stands in for the
  * JPA dirty-check flush inside `UserService.suspend`/`reactivate`. None of that
  * is observable from `user.service.test.ts`, which mocks this whole module out
- * — so it is checked here, against the local Postgres that `docker compose up
- * db` starts and Flyway migrates (`MIGRATION_PLAN.md` §8), exactly as
+ * — so it is checked here, against the Flyway-migrated Postgres configured
+ * in `DATABASE_URL` (`MIGRATION_PLAN.md` §8), exactly as
  * `mission.queries.test.ts` does for the mission DAO.
  *
  * Skipped, with a visible reason, when `DATABASE_URL` isn't configured —
