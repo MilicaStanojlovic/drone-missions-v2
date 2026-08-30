@@ -1,8 +1,19 @@
-# drone-missionsv2
+# Drone Missions
 
-Unified Next.js 15 (App Router) + React 19 + TypeScript + Drizzle + Supabase-Postgres app,
-re-platforming the `drone-missions` Spring Boot backend and Angular frontend. See
-[`MIGRATION_PLAN.md`](./MIGRATION_PLAN.md) for the full architecture and phase-by-phase plan.
+A marketplace that connects **mission designers** with **drone pilots**.
+
+**🌐 Project page:** [milicastanojlovic.github.io/drone-missions-v2](https://milicastanojlovic.github.io/drone-missions-v2/) · **🚀 Live app:** [drone-missions-v2.vercel.app](https://drone-missions-v2.vercel.app) (demo accounts ready on the login screen)
+
+## What it does
+
+- **Mission planning on a map** — a designer plots the flight route waypoint by waypoint on a Leaflet map, fences the zone with a circle or polygon geofence, and writes the brief (dates, location, bidding deadline). Path length and estimated flight time update live.
+- **Bidding** — pilots browse published missions, study the flight plan and place bids in USD with an optional message; a bid can be updated or withdrawn while bidding is open.
+- **Awarding & lifecycle** — the designer awards exactly one bid (the rest are auto-rejected) and the mission walks a six-step ladder: `DRAFT → PUBLISHED → BIDDING → AWARDED → IN PROGRESS → COMPLETED`, with cancellation handled cleanly at any point.
+- **Notifications** — new bids, awards, rejections, cancellations and overdue flights land in the in-app bell menu, and go out as emails when mail is enabled; a daily cron sweep flags overdue missions.
+- **Ratings** — after completion, designer and pilot rate each other (1–5 plus a comment); the score follows the profile around the marketplace.
+- **Admin & audit** — a platform admin sees marketplace-wide stats, hides/removes missions, suspends users, and reads an append-only audit log of every action.
+
+This app is a re-platforming of an earlier two-repo system — [`drone-missions-backend`](https://github.com/MilicaStanojlovic/drone-missions-backend) (Spring Boot) and [`drone-missions-frontend`](https://github.com/MilicaStanojlovic/drone-missions-frontend) (Angular) — migrated behavior-for-behavior into a single Next.js 15 + React 19 + TypeScript + Drizzle + Supabase-Postgres codebase using [Claude Code](https://claude.com/claude-code); see [`MIGRATION_PLAN.md`](./MIGRATION_PLAN.md) for the full architecture and phase-by-phase plan.
 
 ## Setup
 
