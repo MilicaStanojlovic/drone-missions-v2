@@ -25,8 +25,10 @@
       --role-admin: #6d5ef0;
       --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
       --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --nav-h: 60px;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 24px); }
     body {
       margin: 0;
       background:
@@ -53,12 +55,33 @@
       background: var(--primary); transform: rotate(45deg); flex: none;
     }
 
+    /* sticky bar — hides on scroll down, comes back on scroll up */
     header.top {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 22px 0;
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(238, 241, 245, 0.86);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid transparent;
+      transition: transform .28s ease, border-color .2s ease, box-shadow .2s ease;
     }
-    header.top nav { display: flex; gap: 22px; font-size: 14.5px; }
-    header.top nav a { color: var(--muted-fg); }
+    header.top .wrap {
+      display: flex; align-items: center; justify-content: space-between;
+      min-height: var(--nav-h); padding-top: 10px; padding-bottom: 10px;
+    }
+    header.top.is-hidden { transform: translateY(-100%); }
+    header.top.is-stuck {
+      border-bottom-color: var(--border);
+      box-shadow: 0 6px 20px rgba(27, 39, 50, 0.06);
+    }
+    header.top nav {
+      display: flex; gap: 22px; font-size: 14.5px;
+      /* narrow screens: let the links scroll sideways rather than push the
+         page wider than the viewport */
+      min-width: 0; overflow-x: auto;
+      scrollbar-width: none; -ms-overflow-style: none;
+    }
+    header.top nav::-webkit-scrollbar { display: none; }
+    header.top nav a { color: var(--muted-fg); white-space: nowrap; }
     header.top nav a:hover { color: var(--fg); text-decoration: none; }
 
     /* hero */
@@ -118,6 +141,26 @@
     }
     .frame img { display: block; width: 100%; height: auto; }
 
+    /* click-to-zoom trigger wrapped around every screenshot */
+    .zoom {
+      display: block; position: relative; width: 100%;
+      margin: 0; padding: 0; border: 0; background: none;
+      cursor: zoom-in; -webkit-appearance: none; appearance: none;
+      line-height: 0;
+    }
+    .zoom img { transition: transform .35s ease; }
+    .zoom:hover img { transform: scale(1.015); }
+    .zoom:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+    .zoom::after {
+      content: "\2922"; position: absolute; right: 12px; bottom: 12px;
+      width: 34px; height: 34px; border-radius: 50%;
+      background: rgba(27, 39, 50, 0.62); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; line-height: 1; opacity: 0; pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .zoom:hover::after, .zoom:focus-visible::after { opacity: 1; }
+
     /* sections */
     section { padding: 64px 0 8px; }
     .sec-head { text-align: center; max-width: 620px; margin: 0 auto 38px; }
@@ -128,9 +171,6 @@
     .roles { grid-template-columns: repeat(3, 1fr); }
     .features { grid-template-columns: repeat(3, 1fr); }
     .shots { grid-template-columns: repeat(2, 1fr); gap: 26px; }
-    @media (max-width: 860px) {
-      .roles, .features, .shots { grid-template-columns: 1fr; }
-    }
 
     .card {
       background: var(--card); border: 1px solid var(--border);
@@ -168,6 +208,38 @@
     }
     .lifecycle .arrow { color: #b6c2cf; }
 
+    /* demo — the recording is portrait, so it takes the narrow column */
+    .demo {
+      display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+      gap: 46px; align-items: center; max-width: 900px; margin: 0 auto;
+    }
+    .demo-player {
+      /* keep the whole player inside the viewport by capping its WIDTH against
+         viewport height — clamping the height instead would letterbox it */
+      max-width: min(320px, calc((72vh - 42px) * 0.5625));
+      margin: 0 auto;
+    }
+    .demo-player .frame { box-shadow: 0 18px 50px rgba(27, 39, 50, 0.14); }
+    .demo-player video {
+      display: block; width: 100%; height: auto;
+      aspect-ratio: 1080 / 1920;   /* reserve the portrait box before metadata lands */
+      background: #0d141c;
+    }
+    .demo-steps ol { list-style: none; margin: 16px 0 0; padding: 0; }
+    .demo-steps li {
+      display: flex; gap: 14px; align-items: baseline;
+      padding: 11px 0; border-top: 1px solid var(--border);
+      font-size: 15px; color: var(--muted-fg);
+    }
+    .demo-steps li:last-child { border-bottom: 1px solid var(--border); }
+    .demo-steps .n {
+      font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+      color: var(--primary); flex: none; letter-spacing: 0.08em;
+    }
+    .demo-steps b { color: var(--fg); font-weight: 600; }
+    .demo-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+    .demo-cta .btn { padding: 11px 20px; font-size: 14.5px; }
+
     /* screenshots */
     .shot figure { margin: 0; }
     .shot .frame { box-shadow: 0 14px 40px rgba(27, 39, 50, 0.10); }
@@ -197,21 +269,96 @@
       color: var(--muted-fg); font-size: 14px;
     }
     footer .links { margin: 12px 0 0; display: flex; gap: 22px; justify-content: center; }
+
+    /* lightbox */
+    .lb {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px;
+      background: rgba(16, 24, 33, 0.88);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      animation: lb-in .18s ease-out;
+    }
+    .lb[hidden] { display: none; }
+    @keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+    .lb figure {
+      margin: 0; display: flex; flex-direction: column; align-items: center;
+      gap: 16px; max-width: 100%; max-height: 100%;
+    }
+    .lb img {
+      display: block; width: auto; height: auto;
+      max-width: min(1400px, 92vw); max-height: 82vh;
+      border-radius: 10px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+      background: var(--card);
+    }
+    .lb figcaption {
+      font-family: var(--mono); font-size: 13px; letter-spacing: 0.03em;
+      color: #cdd7e2; text-align: center; max-width: 62ch; line-height: 1.5;
+    }
+    .lb figcaption b { color: #fff; font-weight: 600; }
+    .lb button {
+      position: absolute; border: 0; cursor: pointer; color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      border-radius: 50%; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s ease;
+    }
+    .lb button:hover { background: rgba(255, 255, 255, 0.24); }
+    .lb button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    .lb-close {
+      top: 22px; right: 24px; width: 44px; height: 44px;
+      font-size: 26px; padding-bottom: 3px;
+    }
+    .lb-nav {
+      top: 50%; transform: translateY(-50%);
+      width: 48px; height: 48px; font-size: 30px; padding-bottom: 4px;
+    }
+    .lb-prev { left: 24px; }
+    .lb-next { right: 24px; }
+
+    @media (max-width: 860px) {
+      .roles, .features, .shots { grid-template-columns: 1fr; }
+      .demo { grid-template-columns: 1fr; gap: 28px; }
+      .demo-player { max-width: min(300px, calc((66vh - 42px) * 0.5625)); }
+      header.top nav { gap: 15px; font-size: 13.5px; }
+      .lb { padding: 20px; }
+    }
+    @media (max-width: 620px) {
+      header.top .wrap { gap: 12px; }
+      .brand { font-size: 0; gap: 0; flex: none; }
+      header.top nav { gap: 13px; font-size: 13px; justify-content: flex-end; }
+      .lb-nav { width: 40px; height: 40px; font-size: 24px; }
+      .lb-prev { left: 8px; }
+      .lb-next { right: 8px; }
+      .lb img { max-width: 96vw; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      header.top, .zoom img, .btn { transition: none; }
+      .lb { animation: none; }
+      .zoom:hover img { transform: none; }
+    }
   </style>
 </head>
 <body>
 
-  <div class="wrap">
-    <header class="top">
+  <header class="top" id="site-nav">
+    <div class="wrap">
       <span class="brand"><span class="diamond"></span>DRONE&nbsp;MISSIONS</span>
       <nav>
         <a href="#roles">Roles</a>
         <a href="#features">Features</a>
+        <a href="#demo">Demo</a>
         <a href="#screenshots">Screenshots</a>
         <a href="#stack">Tech</a>
         <a href="https://github.com/MilicaStanojlovic/drone-missions-v2">GitHub</a>
       </nav>
-    </header>
+    </div>
+  </header>
+
+  <div class="wrap">
 
     <section class="hero">
       <span class="eyebrow">Drone flight marketplace</span>
@@ -234,7 +381,9 @@
             <span></span><span></span><span></span>
             <span class="url">drone-missions-v2.vercel.app</span>
           </div>
-          <img src="assets/mission.png" alt="A mission detail page: Leaflet map with numbered waypoints inside a dashed geofence, mission status stepper, and a bids panel with two pilot bids ready to accept." width="2549" height="2238" />
+          <button type="button" class="zoom" aria-label="View full size: mission detail page">
+            <img src="assets/mission.png" alt="A mission detail page: Leaflet map with numbered waypoints inside a dashed geofence, mission status stepper, and a bids panel with two pilot bids ready to accept." width="2549" height="2238" />
+          </button>
         </div>
       </div>
     </section>
@@ -313,55 +462,103 @@
       </div>
     </section>
 
+    <section id="demo">
+      <div class="sec-head">
+        <span class="eyebrow">Demo</span>
+        <h2>Watch the whole loop</h2>
+        <p>Recorded on the live deployment.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-player">
+          <div class="frame">
+            <div class="bar">
+              <span></span><span></span><span></span>
+              <span class="url">demo — drone-missions-v2.vercel.app</span>
+            </div>
+            <video src="assets/demo.mp4" width="1080" height="1920" controls muted loop playsinline preload="metadata"></video>
+          </div>
+        </div>
+        <div class="demo-steps">
+          <span class="eyebrow">Watch the flow</span>
+          <ol>
+            <li><span class="n">01</span><span><b>Sign in</b> as a mission designer — the demo accounts fill themselves in.</span></li>
+            <li><span class="n">02</span><span><b>Plot the flight</b> node by node on the map, then fence the zone.</span></li>
+            <li><span class="n">03</span><span><b>Publish it</b>, and pilots start placing competing bids.</span></li>
+            <li><span class="n">04</span><span><b>Award one pilot</b> — every other bid is rejected automatically.</span></li>
+            <li><span class="n">05</span><span><b>Fly and complete it</b>, then both sides rate each other.</span></li>
+          </ol>
+          <div class="demo-cta">
+            <a class="btn btn-primary" href="https://drone-missions-v2.vercel.app">Open the live app →</a>
+            <a class="btn btn-ghost" href="assets/drone-missions-flier.pdf">One-pager (PDF) ↓</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="screenshots">
       <div class="sec-head">
         <span class="eyebrow">Screenshots</span>
         <h2>A quick tour</h2>
-        <p>Straight from the live deployment.</p>
-      </div>
-      <div class="hero-shot" style="margin-top: 0; margin-bottom: 40px;">
-        <div class="frame">
-          <div class="bar">
-            <span></span><span></span><span></span>
-            <span class="url">demo — drone-missions-v2.vercel.app</span>
-          </div>
-          <video src="assets/demo.mp4" controls muted playsinline preload="metadata" style="display: block; width: 100%; height: auto;"></video>
-        </div>
+        <p>Straight from the live deployment — click any shot to see it full size.</p>
       </div>
       <div class="grid shots">
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/login.png" alt="Sign-in screen with one-click demo accounts for the Mission Designer and Pilot roles." width="2597" height="1936" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: sign-in screen">
+                <img loading="lazy" src="assets/login.png" alt="Sign-in screen with one-click demo accounts for the Mission Designer and Pilot roles." width="2597" height="1936" />
+              </button>
+            </div>
             <figcaption><b>Sign in.</b> Demo accounts fill themselves in with one tap.</figcaption>
           </figure>
         </div>
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/new-mission.png" alt="New mission editor: interactive map for adding waypoint nodes and a zone, next to the mission brief form." width="2452" height="1529" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: new mission editor">
+                <img loading="lazy" src="assets/new-mission.png" alt="New mission editor: interactive map for adding waypoint nodes and a zone, next to the mission brief form." width="1901" height="866" />
+              </button>
+            </div>
             <figcaption><b>Plan.</b> Click the map to add nodes, fence the zone, write the brief.</figcaption>
           </figure>
         </div>
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/my-missions.png" alt="My Missions dashboard with per-status counts and mission cards showing map previews." width="2596" height="2248" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: My Missions dashboard">
+                <img loading="lazy" src="assets/my-missions.png" alt="My Missions dashboard with per-status counts and mission cards showing map previews." width="1892" height="867" />
+              </button>
+            </div>
             <figcaption><b>Publish.</b> The designer's dashboard tracks every mission by status.</figcaption>
           </figure>
         </div>
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/mission-bid.png" alt="Pilot's view of a mission in bidding: flight plan on the map and a panel to place, update or withdraw a bid." width="2596" height="2248" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: pilot bidding view">
+                <img loading="lazy" src="assets/mission-bid.png" alt="Pilot's view of a mission in bidding: flight plan on the map and a panel to place, update or withdraw a bid." width="2596" height="2248" />
+              </button>
+            </div>
             <figcaption><b>Bid.</b> Pilots study the flight plan and compete for the job.</figcaption>
           </figure>
         </div>
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/notifications.png" alt="Notification bell menu listing new-bid notifications." width="488" height="661" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: notification menu">
+                <img loading="lazy" src="assets/notifications.png" alt="Notification bell menu listing new-bid notifications." width="488" height="661" />
+              </button>
+            </div>
             <figcaption><b>Stay in the loop.</b> Bids, awards and deadlines land in the bell.</figcaption>
           </figure>
         </div>
         <div class="shot">
           <figure>
-            <div class="frame"><img loading="lazy" src="assets/admin-overview.png" alt="Admin platform overview with mission, pilot and bid stats, missions-by-status bars and bids-per-mission chart." width="2452" height="1529" /></div>
+            <div class="frame">
+              <button type="button" class="zoom" aria-label="View full size: admin overview">
+                <img loading="lazy" src="assets/admin-overview.png" alt="Admin platform overview with mission, pilot and bid stats, missions-by-status bars and bids-per-mission chart." width="2452" height="1529" />
+              </button>
+            </div>
             <figcaption><b>Administer.</b> Stats, moderation, users and the audit trail.</figcaption>
           </figure>
         </div>
@@ -401,6 +598,123 @@
       <p>Built by Milica Stanojlovic</p>
     </footer>
   </div>
+
+  <div class="lb" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Screenshot viewer">
+    <button type="button" class="lb-close" aria-label="Close">&times;</button>
+    <button type="button" class="lb-nav lb-prev" aria-label="Previous screenshot">&lsaquo;</button>
+    <button type="button" class="lb-nav lb-next" aria-label="Next screenshot">&rsaquo;</button>
+    <figure>
+      <img alt="" />
+      <figcaption></figcaption>
+    </figure>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var lightboxOpen = false;
+
+      /* ---- sticky bar: hide going down, reveal going up ---- */
+      var header = document.getElementById('site-nav');
+      var lastY = window.pageYOffset;
+      var ticking = false;
+      var HIDE_AFTER = 120;   /* stay put until we're clear of the hero */
+      var UP_DEADZONE = 6;    /* ignore sub-pixel jitter */
+
+      function onScroll() {
+        var y = Math.max(0, window.pageYOffset);
+
+        header.classList.toggle('is-stuck', y > 4);
+
+        if (!lightboxOpen) {
+          if (y > lastY && y > HIDE_AFTER) {
+            header.classList.add('is-hidden');
+          } else if (y < lastY - UP_DEADZONE || y <= HIDE_AFTER) {
+            header.classList.remove('is-hidden');
+          }
+        }
+        lastY = y;
+        ticking = false;
+      }
+
+      window.addEventListener('scroll', function () {
+        if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+      }, { passive: true });
+
+      /* a keyboard user must never focus a link that's scrolled out of sight */
+      header.addEventListener('focusin', function () {
+        header.classList.remove('is-hidden');
+      });
+
+      /* ---- lightbox ---- */
+      var lb = document.getElementById('lightbox');
+      var lbImg = lb.querySelector('img');
+      var lbCap = lb.querySelector('figcaption');
+      var closeBtn = lb.querySelector('.lb-close');
+      var prevBtn = lb.querySelector('.lb-prev');
+      var nextBtn = lb.querySelector('.lb-next');
+      var zooms = Array.prototype.slice.call(document.querySelectorAll('.zoom'));
+      var index = 0;
+      var opener = null;
+
+      function show(i) {
+        index = (i + zooms.length) % zooms.length;
+        var thumb = zooms[index].querySelector('img');
+        var fig = zooms[index].closest('figure');
+        var cap = fig ? fig.querySelector('figcaption') : null;
+        lbImg.src = thumb.currentSrc || thumb.src;
+        lbImg.alt = thumb.alt;
+        lbCap.innerHTML = cap ? cap.innerHTML : '';
+      }
+
+      function openLightbox(i, trigger) {
+        opener = trigger;
+        show(i);
+        var barWidth = window.innerWidth - document.documentElement.clientWidth;
+        document.body.style.overflow = 'hidden';
+        if (barWidth > 0) { document.body.style.paddingRight = barWidth + 'px'; }
+        lb.hidden = false;
+        lightboxOpen = true;
+        closeBtn.focus();
+      }
+
+      function closeLightbox() {
+        lb.hidden = true;
+        lightboxOpen = false;
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        lbImg.removeAttribute('src');
+        if (opener) { opener.focus(); opener = null; }
+      }
+
+      zooms.forEach(function (btn, i) {
+        btn.addEventListener('click', function () { openLightbox(i, btn); });
+      });
+
+      closeBtn.addEventListener('click', closeLightbox);
+      prevBtn.addEventListener('click', function () { show(index - 1); });
+      nextBtn.addEventListener('click', function () { show(index + 1); });
+      lb.addEventListener('click', function (e) { if (e.target === lb) { closeLightbox(); } });
+
+      document.addEventListener('keydown', function (e) {
+        if (!lightboxOpen) { return; }
+        if (e.key === 'Escape') { closeLightbox(); }
+        else if (e.key === 'ArrowLeft') { show(index - 1); }
+        else if (e.key === 'ArrowRight') { show(index + 1); }
+        else if (e.key === 'Tab') {
+          /* keep focus inside the dialog */
+          var stops = [closeBtn, prevBtn, nextBtn];
+          var at = stops.indexOf(document.activeElement);
+          var next = e.shiftKey ? at - 1 : at + 1;
+          if (at === -1 || next < 0 || next >= stops.length) {
+            e.preventDefault();
+            stops[e.shiftKey ? stops.length - 1 : 0].focus();
+          }
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>
