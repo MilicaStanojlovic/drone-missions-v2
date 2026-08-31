@@ -2,7 +2,7 @@
 
 A marketplace that connects **mission designers** with **drone pilots**.
 
-**🌐 Project page:** [milicastanojlovic.github.io/drone-missions-v2](https://milicastanojlovic.github.io/drone-missions-v2/) (with a [demo video](https://milicastanojlovic.github.io/drone-missions-v2/#screenshots)) · **🚀 Live app:** [drone-missions-v2.vercel.app](https://drone-missions-v2.vercel.app) (demo accounts ready on the login screen) · **📄 [One-pager (PDF)](https://milicastanojlovic.github.io/drone-missions-v2/assets/drone-missions-flier.pdf)**
+**🌐 Project page:** [milicastanojlovic.github.io/drone-missions-v2](https://milicastanojlovic.github.io/drone-missions-v2/) (with a [screenshot tour](https://milicastanojlovic.github.io/drone-missions-v2/#screenshots)) · **🚀 Live app:** [drone-missions-v2.vercel.app](https://drone-missions-v2.vercel.app) (demo accounts ready on the login screen) · **📄 [One-pager (PDF)](https://milicastanojlovic.github.io/drone-missions-v2/assets/drone-missions-flier.pdf)**
 
 ## What it does
 

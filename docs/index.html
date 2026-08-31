@@ -216,8 +216,13 @@
     .demo-player {
       /* keep the whole player inside the viewport by capping its WIDTH against
          viewport height — clamping the height instead would letterbox it */
-      max-width: min(320px, calc((72vh - 42px) * 0.5625));
+      max-width: min(320px, calc((72vh - 34px) * 0.5625));
       margin: 0 auto;
+    }
+    .demo-player figure { margin: 0; }
+    .demo-player figcaption {
+      margin-top: 10px; font-family: var(--mono); font-size: 11.5px;
+      line-height: 1.45; color: var(--muted-fg); text-align: center;
     }
     .demo-player .frame { box-shadow: 0 18px 50px rgba(27, 39, 50, 0.14); }
     .demo-player video {
@@ -321,7 +326,7 @@
     @media (max-width: 860px) {
       .roles, .features, .shots { grid-template-columns: 1fr; }
       .demo { grid-template-columns: 1fr; gap: 28px; }
-      .demo-player { max-width: min(300px, calc((66vh - 42px) * 0.5625)); }
+      .demo-player { max-width: min(300px, calc((66vh - 34px) * 0.5625)); }
       header.top nav { gap: 15px; font-size: 13.5px; }
       .lb { padding: 20px; }
     }
@@ -350,7 +355,7 @@
       <nav>
         <a href="#roles">Roles</a>
         <a href="#features">Features</a>
-        <a href="#demo">Demo</a>
+        <a href="#how-it-works">How it works</a>
         <a href="#screenshots">Screenshots</a>
         <a href="#stack">Tech</a>
         <a href="https://github.com/MilicaStanojlovic/drone-missions-v2">GitHub</a>
@@ -462,24 +467,23 @@
       </div>
     </section>
 
-    <section id="demo">
+    <section id="how-it-works">
       <div class="sec-head">
-        <span class="eyebrow">Demo</span>
-        <h2>Watch the whole loop</h2>
-        <p>Recorded on the live deployment.</p>
+        <span class="eyebrow">How it works</span>
+        <h2>How a mission runs</h2>
+        <p>Five steps from an idea on a map to a rated flight.</p>
       </div>
       <div class="demo">
         <div class="demo-player">
-          <div class="frame">
-            <div class="bar">
-              <span></span><span></span><span></span>
-              <span class="url">demo — drone-missions-v2.vercel.app</span>
+          <figure>
+            <div class="frame">
+              <video src="assets/demo.mp4" width="1080" height="1920" controls muted loop playsinline preload="metadata"></video>
             </div>
-            <video src="assets/demo.mp4" width="1080" height="1920" controls muted loop playsinline preload="metadata"></video>
-          </div>
+            <figcaption>Illustrative stock footage — not a recording of the app.</figcaption>
+          </figure>
         </div>
         <div class="demo-steps">
-          <span class="eyebrow">Watch the flow</span>
+          <span class="eyebrow">The flow</span>
           <ol>
             <li><span class="n">01</span><span><b>Sign in</b> as a mission designer — the demo accounts fill themselves in.</span></li>
             <li><span class="n">02</span><span><b>Plot the flight</b> node by node on the map, then fence the zone.</span></li>
